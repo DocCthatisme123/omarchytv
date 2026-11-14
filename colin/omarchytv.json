@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "screensaver": {
+    "art": "pulse",
+    "mode": "pulse"
+  },
+  "ssBefore215": {
+    "art": "aquarium",
+    "mode": "aquarium",
+    "living": false
+  },
+  "pulseDefault215": true,
+  "theme": {
+    "name": "cumulus",
+    "source": "tv"
+  },
+  "wallpaper": "omarchy",
+  "wallpaper_bg": 1,
+  "randomScope": "all",
+  "cinemarchy": {
+    "dhhLastSeen": 1787420478000
+  },
+  "geometry": {
+    "transparency": 25,
+    "gaps": 5,
+    "border": 2,
+    "fontScale": 1,
+    "appSize": "large",
+    "tileScale": 1,
+    "wallpaperDim": "off"
+  },
+  "homeWidgets": {
+    "racing": true
+  },
+  "racing": {
+    "series": [
+      "motogp"
+    ],
+    "bar": true
+  },
+  "aiPane": {
+    "offline": "stale"
+  },
+  "plugins": {
+    "companionOverlay": false,
+    "companionAnim": true,
+    "companionAgent": "grokbot",
+    "spacexTv": false,
+    "grokbot": false
+  },
+  "tv": {
+    "enabled": false
+  },
+  "random_theme": false,
+  "random_wallpaper": true,
+  "omafireSound": true,
+  "webapps": [],
+  "voiceKey": "launcher"
+}
