@@ -41,3 +41,27 @@ Results from the button test (2026-11-14). "Home sees it" means the launcher get
 | Mic (Assistant) | raw KEY_SEARCH | | system takes it. Google voice search is disabled, so it goes nowhere |
 | Menu | raw KEY_MENU | | system (Skyworth quick menu) |
 | Source | raw KEY_CD | | system (input picker) |
+
+## Ideas for the free buttons (parked, not active)
+
+Colin's call (2026-11-14): leave the buttons unmapped for now and come back to them. Suggestions, so nobody starts from zero:
+
+| Button | Suggested job | omarchytv.json binding |
+|---|---|---|
+| Info | keep TV info | (none) |
+| Guide | Walker | `"GUIDE": {"single": {"action": "walker"}}` |
+| Red | screensaver now | `"PROG_RED": {"single": {"action": "screensaver"}}` |
+| Green | Bluetooth settings | `"PROG_GREEN": {"single": {"intent": "intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end"}}` |
+| Yellow | YouTube Music | `"PROG_YELLOW": {"single": {"app": "com.google.android.youtube.tvmusic"}}` |
+| Blue | next theme | `"PROG_BLUE": {"single": {"action": "next-theme"}}` |
+| P up / P down | workspaces | `"CHANNEL_UP"`, `"CHANNEL_DOWN"` (P down not tested yet) |
+| AD | TV settings | needs a scancode match (519), because Subtitle shares FUNCTION 119 |
+| Subtitle | real subtitles toggle | needs a scancode match (206), plus code that sends CAPTIONS 175 |
+
+To turn any of these on:
+1. Add a `skyworth-swtv-20ae` profile to `launcher/app/src/main/assets/remotes.json` (match 1d5a/c580, listing the buttons).
+2. Add the bindings under `"keys"` in colin/omarchytv.json.
+3. Enable the "OmarchyTV remote buttons" accessibility service once.
+
+Untested: whether that service can catch Google Play (KEY_VCR) and Mic (KEY_SEARCH), which the TV currently takes first.
+Probe used for the test: ~/Slater/scripts/tv-button-probe on the tablet (raw code, whether the launcher saw it, and what opened; it returns Home after each press).
