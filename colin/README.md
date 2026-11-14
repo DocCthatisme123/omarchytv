@@ -7,6 +7,11 @@ Everything Colin-specific lives in this folder, so Marco's updates merge in clea
 - `omarchytv.json`: Colin's launcher settings (Grok Bot, SpaceX TV and X off, voice key opens Walker).
   Pushed to the TV at /sdcard/Android/data/com.omarchytv.home/files/omarchytv.json after a fresh install.
 
-Built and installed by the NUC. The signing key is kept on the NUC and never committed.
+Code changes outside this folder (kept small, to merge cleanly):
+- `ColinKeyLog.java` plus one line each in `KeyMapService` and `MainActivity`: logs every key press,
+  for mapping remote buttons. `adb logcat -s OmarchyKey`
+
+Built, signed and installed by Nook on the NUC. The build and deploy scripts are in `~/Nook/projects/omarchytv-ci/`
+on the NUC, and the weekly run is Sunday at 03:30. The signing key is kept on the NUC and never committed.
 
 All credit for OmarchyTV to Marco Porro (MIT); see ../LICENSE.

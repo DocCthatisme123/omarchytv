@@ -47,6 +47,7 @@ public class KeyMapService extends AccessibilityService {
     @Override
     protected boolean onKeyEvent(KeyEvent e) {
         int code = e.getKeyCode();
+        ColinKeyLog.log("service", e);
         LauncherConfig.KeyBinding[] b = LauncherConfig.get(this).keys.get(code);
         if (b != null && !RemoteProfiles.handles(this, e)) b = null;   // only profiled buttons of known remotes
         if (b != null && code == KeyEvent.KEYCODE_HOME && homeGivenBack()) b = null;   // let the TV's own Home through

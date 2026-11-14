@@ -4196,6 +4196,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
+        ColinKeyLog.log("home", e);
         if (BootScreenView.consumeKey(e)) return true;   // boot screen: any key skips, none reaches Home
         if (LiftoffView.consumeKey(e)) return true;      // liftoff countdown: any key hides it
         if (swallowKeyUp == e.getKeyCode() && e.getAction() == KeyEvent.ACTION_UP) {
