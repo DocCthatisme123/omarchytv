@@ -41,6 +41,9 @@ final class BootScreenView extends View {
     private static BootScreenView showing;
     private static BroadcastReceiver screenOn;
     private static boolean wakePending;
+    /** Colin's fork: the live Home, so a late SCREEN_ON (it often lands after onResume) can still play the boot. */
+    private static java.lang.ref.WeakReference<Activity> liveA;
+    private static java.lang.ref.WeakReference<FrameLayout> liveRoot;
 
     private final BootScript script;
     private final boolean fx;
@@ -88,12 +91,14 @@ final class BootScreenView extends View {
 
     /** From MainActivity.onCreate, after setContentView. */
     static void onCreate(Activity a, FrameLayout root) {
+        remember(a, root);   // Colin's fork
         String mode = LauncherConfig.get(a).bootScreen;
         if ("wake".equals(mode) && screenOn == null) {
             screenOn = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context c, Intent i) {
                     wakePending = true;
+                    lateWake();   // Colin's fork
                 }
             };
             try {
@@ -112,9 +117,26 @@ final class BootScreenView extends View {
 
     /** From MainActivity.onResume: with "wake", play again after the screen came back on. */
     static void onResume(Activity a, FrameLayout root) {
+        remember(a, root);   // Colin's fork
         if (!wakePending) return;
         wakePending = false;
         if ("wake".equals(LauncherConfig.get(a).bootScreen)) show(a, root);
+    }
+
+    /** Colin's fork: keep a weak handle on the live Home for {@link #lateWake}. */
+    private static void remember(Activity a, FrameLayout root) {
+        liveA = new java.lang.ref.WeakReference<>(a);
+        liveRoot = new java.lang.ref.WeakReference<>(root);
+    }
+
+    /** Colin's fork: SCREEN_ON arrived after onResume, so play the wake boot now if Home is in front. */
+    private static void lateWake() {
+        Activity a = liveA != null ? liveA.get() : null;
+        if (a == null || a.isFinishing()) return;
+        a.getWindow().getDecorView().postDelayed(() -> {
+            FrameLayout root = liveRoot != null ? liveRoot.get() : null;
+            if (wakePending && root != null && a.hasWindowFocus()) onResume(a, root);
+        }, 250);
     }
 
     /** From MainActivity.onDestroy. */
