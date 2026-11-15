@@ -70,6 +70,7 @@ final class ColinHavenHome extends View {
     private final Bitmap dayBg, nightBg;
     private final Paint shape = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.graphics.Path clip = new android.graphics.Path();
+    private final android.graphics.Matrix quad = new android.graphics.Matrix();
     private final Paint img = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint small = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -218,8 +219,9 @@ final class ColinHavenHome extends View {
         img.setAlpha(255);
         c.drawBitmap(night() ? nightBg : dayBg, null, r, img);
 
-        // Books: thick hardcovers lying flat, stacked tight and filling the shelf alcove, as in the concept.
-        float shelfX = w * 0.058f, shelfW = w * 0.215f, top = h * 0.235f, stepY = h * 0.10f, bookH = stepY - 2f;
+        // Books: thick hardcovers lying flat, stacked inside the shelf opening (between the pillars, from the top
+        // shelf down to the base) and following the shelf's perspective: the top shelf slopes down to the right,
+        // the lower ones flatten out. Each book is drawn flat and mapped onto its quad (measured on the B1 art).
         boolean animating = false;
         for (int i = 0; i < BOOKS.length; i++) {
             float target = i == sel ? 1f : 0f;
@@ -229,11 +231,22 @@ final class ColinHavenHome extends View {
                 animating = true;
             }
         }
-        for (int i = 0; i < BOOKS.length; i++) {
-            if (i == sel) continue;   // the selected book is drawn last, on top
-            drawBook(c, i, shelfX, top + i * stepY, shelfW, bookH, now);
+        float xL = w * 0.0583f, xR = w * 0.2719f, tL = h * 0.2889f, tR = h * 0.3278f, bL = h * 0.7944f, bR = h * 0.80f;
+        int n = BOOKS.length;
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = 0; i < n; i++) {
+                if ((i == sel) != (pass == 1)) continue;   // the selected book last, on top
+                float yl0 = tL + (bL - tL) * i / n, yr0 = tR + (bR - tR) * i / n;
+                float yl1 = tL + (bL - tL) * (i + 1) / n - 2f, yr1 = tR + (bR - tR) * (i + 1) / n - 2f;
+                float bw = xR - xL, bh = yl1 - yl0;
+                quad.setPolyToPoly(new float[]{0, 0, bw, 0, bw, bh, 0, bh},
+                        0, new float[]{xL, yl0, xR, yr0, xR, yr1, xL, yl1}, 0, 4);
+                c.save();
+                c.concat(quad);
+                drawBook(c, i, 0, 0, bw, bh, now);
+                c.restore();
+            }
         }
-        drawBook(c, sel, shelfX, top + sel * stepY, shelfW, bookH, now);
 
         // Clock and date, top right, on the calm sky.
         Date d = new Date();
@@ -255,7 +268,7 @@ final class ColinHavenHome extends View {
         small.setTextAlign(Paint.Align.LEFT);
         small.setTextSize(h * 0.022f);
         small.setColor(0xB3FFF6E6);
-        c.drawText("more apps  \u203A", shelfX + w * 0.04f, h * 0.885f, small);
+        c.drawText("more apps  \u203A", w * 0.075f, h * 0.86f, small);
 
         if (animating) postInvalidateOnAnimation();
         else postInvalidateDelayed(1000);   // keeps the clock and the selected book's glow alive
