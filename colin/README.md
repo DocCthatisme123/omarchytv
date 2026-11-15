@@ -35,3 +35,10 @@ selected until the first key and it returns to the level books after 30 s idle. 
 stock OmarchyTV home, Home brings it back. Clock and date top right. Art: ~/Slater/notes/holmes-haven/final-pack.
 Books: Storybooks=Netflix, Learning=YouTube, Music=YouTube Music, Discovery=Prime Video, Family=Live TV,
 Technology=stock home. No night variant yet (the old B3 doesn't match the new painting). Off: `"havenHome": false`.
+
+## 10 workspaces (Colin's layout)
+1-5 are the family's: 1 = the Holmes Haven bookshelf, 2-5 = placeholders ("coming soon") until Colin and Mikayla design them.
+Marco's original five move to 6, 7, 8, 9, 0 (in his bar order). Number keys jump (0 = 10), CH+/CH- step through all ten,
+Left/Right step 1-5 (Right on 5 goes to 6), Back anywhere else returns to 1, Home always returns to 1, and the Technology
+book opens 8 (the app grid). Handled in ColinHavenHome.workspaceKey, one hook line above Marco's workspace keys.
+The Holmes Haven logo (assets/holmes/logo_bar.webp) sits in the sky, top centre, on the family workspaces.

@@ -152,7 +152,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         setContentView(R.layout.activity_main);
         Theme.apply(getWindow().getDecorView());
         BootScreenView.onCreate(this, findViewById(R.id.root));   // v2.14 boot screen (once per boot by default)
-        ColinHavenHome.attach(this, findViewById(R.id.root));   // Colin's fork: Holmes Haven bookshelf home
+        ColinHavenHome.attach(this, findViewById(R.id.root), this::setWorkspace, () -> workspace);   // Colin's fork: Holmes Haven home
         current = new java.lang.ref.WeakReference<>(this);
         CrtOverlay.attach(this, findViewById(R.id.root), LauncherConfig.get(this).pluginRetroCrt);   // v2.14 Retro CRT plugin
         // Lights hub only while OmarchyTV is on screen; the snapshot ("Restore previous") is queued before the paint.
@@ -4239,6 +4239,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
                     return true;
                 }
             }
+            if (ColinHavenHome.workspaceKey(e)) return true;   // Colin's fork: 10 workspaces, family 1-5, Marco's 6-0
             // v2.10 workspaces: 1-5 jump, CH+/CH− next/previous (only reaches us while the launcher is in front).
             if (kc >= KeyEvent.KEYCODE_1 && kc <= KeyEvent.KEYCODE_5) {
                 int n = LauncherConfig.get(this).workspaceAt(kc - KeyEvent.KEYCODE_0);   // the key is the bar position
