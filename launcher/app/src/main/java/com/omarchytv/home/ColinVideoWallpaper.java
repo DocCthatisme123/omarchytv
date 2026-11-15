@@ -18,7 +18,7 @@ import java.util.Set;
  * on the video plane (4K on the Skyworth) instead of going through a TextureView like the bundled intros.
  *
  * Drop clips in the app's own folder (no storage permission needed):
- *   /sdcard/Android/data/com.omarchytv.home/files/video/&lt;theme&gt;.mp4   (e.g. cumulus.mp4), or
+ *   /sdcard/Android/data/com.omarchytv.home/files/video/{theme}.mp4   (e.g. cumulus.mp4), or
  *   /sdcard/Android/data/com.omarchytv.home/files/video/default.mp4     (any theme)
  * No file = the stock wallpaper and intro, unchanged. A clip that fails to play is skipped until the app restarts,
  * and the still wallpaper underneath stays visible. Muted, always looping; resumes where it left off.
@@ -84,14 +84,14 @@ final class ColinVideoWallpaper {
                     mp.setOnErrorListener((m, what, extra) -> {
                         Log.w(TAG, "failed " + p + " what=" + what + " extra=" + extra + "; skipping it");
                         broken.add(p);
-                        stop((ViewGroup) sv.getParent());
+                        if (view == sv) stop((ViewGroup) sv.getParent());
                         return true;
                     });
                     mp.prepareAsync();
                 } catch (Throwable t) {
                     Log.w(TAG, "failed " + p, t);
                     broken.add(p);
-                    stop((ViewGroup) sv.getParent());
+                    if (view == sv) stop((ViewGroup) sv.getParent());
                 }
             }
             @Override public void surfaceChanged(SurfaceHolder h, int fmt, int w, int hh) {}
