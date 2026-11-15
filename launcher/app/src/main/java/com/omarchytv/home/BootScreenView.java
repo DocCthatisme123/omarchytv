@@ -97,12 +97,18 @@ final class BootScreenView extends View {
             screenOn = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context c, Intent i) {
+                    if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {   // Colin's fork: cover Home before it sleeps
+                        armCover();
+                        return;
+                    }
                     wakePending = true;
                     lateWake();   // Colin's fork
                 }
             };
             try {
-                a.getApplicationContext().registerReceiver(screenOn, new IntentFilter(Intent.ACTION_SCREEN_ON));
+                IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_ON);
+                f.addAction(Intent.ACTION_SCREEN_OFF);   // Colin's fork
+                a.getApplicationContext().registerReceiver(screenOn, f);
             } catch (RuntimeException e) {
                 screenOn = null;
             }
@@ -118,6 +124,10 @@ final class BootScreenView extends View {
     /** From MainActivity.onResume: with "wake", play again after the screen came back on. */
     static void onResume(Activity a, FrameLayout root) {
         remember(a, root);   // Colin's fork
+        if (ColinHavenBoot.fireIfArmed()) {   // Colin's fork: woke to Home, the cover was already up (no flicker)
+            wakePending = false;
+            return;
+        }
         if (!wakePending) return;
         wakePending = false;
         if ("wake".equals(LauncherConfig.get(a).bootScreen)) show(a, root);
@@ -129,6 +139,14 @@ final class BootScreenView extends View {
         liveRoot = new java.lang.ref.WeakReference<>(root);
     }
 
+    /** Colin's fork: screen going off with "wake" on: put the boot's first (black) frame over Home now. */
+    private static void armCover() {
+        Activity a = liveA != null ? liveA.get() : null;
+        FrameLayout root = liveRoot != null ? liveRoot.get() : null;
+        if (a == null || root == null || a.isFinishing()) return;
+        if ("wake".equals(LauncherConfig.get(a).bootScreen)) ColinHavenBoot.arm(a, root);
+    }
+
     /** Colin's fork: SCREEN_ON arrived after onResume, so play the wake boot now if Home is in front. */
     private static void lateWake() {
         Activity a = liveA != null ? liveA.get() : null;
@@ -137,6 +155,8 @@ final class BootScreenView extends View {
             FrameLayout root = liveRoot != null ? liveRoot.get() : null;
             if (wakePending && root != null && a.hasWindowFocus()) onResume(a, root);
         }, 250);
+        // Woke into another app (Home never resumed): drop the cover so it can't play later out of the blue.
+        a.getWindow().getDecorView().postDelayed(ColinHavenBoot::disarm, 2500);
     }
 
     /** From MainActivity.onDestroy. */

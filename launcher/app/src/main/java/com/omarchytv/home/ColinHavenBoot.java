@@ -42,7 +42,7 @@ final class ColinHavenBoot extends View {
     private final RectF r = new RectF();
     private final float[] starX = new float[28], starY = new float[28], starPhase = new float[28];
     private long start;
-    private boolean fading, done;
+    private boolean fading, done, armed;
 
     private ColinHavenBoot(Context c, Bitmap bg, Bitmap emblem, Bitmap wordmark) {
         super(c);
@@ -59,9 +59,34 @@ final class ColinHavenBoot extends View {
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
+    /** Screen going off: cover Home with the boot's black first frame, held until {@link #fireIfArmed}. */
+    static void arm(Activity a, FrameLayout root) {
+        if (showing != null) return;
+        if (show(a, root) && showing != null) {
+            showing.armed = true;
+            showing.invalidate();
+        }
+    }
+
+    /** Home resumed after the screen came on: start the held boot. False if nothing was armed. */
+    static boolean fireIfArmed() {
+        ColinHavenBoot v = showing;
+        if (v == null || !v.armed) return false;
+        v.armed = false;
+        v.start = SystemClock.uptimeMillis();
+        v.invalidate();
+        return true;
+    }
+
+    /** Still armed after wake (the TV woke into another app): drop the cover. */
+    static void disarm() {
+        ColinHavenBoot v = showing;
+        if (v != null && v.armed) v.finish();
+    }
+
     /** True when the Holmes Haven art is bundled; then BootScreenView hands over to us. */
     static boolean show(Activity a, FrameLayout root) {
-        if (showing != null) return true;
+        if (showing != null) return fireIfArmed() || true;
         Bitmap bg = load(a, "holmes/boot_bg.webp"), em = load(a, "holmes/emblem.webp"), wm = load(a, "holmes/wordmark.webp");
         if (bg == null || em == null || wm == null || root == null) return false;
         ColinHavenBoot v = new ColinHavenBoot(a, bg, em, wm);
@@ -83,6 +108,10 @@ final class ColinHavenBoot extends View {
     static boolean consumeKey(KeyEvent e) {
         ColinHavenBoot v = showing;
         if (v == null) return false;
+        if (v.armed) {   // a key while the cover is held: just start it
+            fireIfArmed();
+            return true;
+        }
         if (e.getAction() == KeyEvent.ACTION_DOWN) v.fade();
         return true;
     }
@@ -105,7 +134,7 @@ final class ColinHavenBoot extends View {
     protected void onDraw(Canvas c) {
         int w = getWidth(), h = getHeight();
         c.drawColor(0xFF000000);
-        if (w == 0 || h == 0) return;
+        if (w == 0 || h == 0 || armed) return;   // armed: black cover, no animation until the screen is back
         int ms = (int) (SystemClock.uptimeMillis() - start);
         float t = ms / (float) TOTAL;
 
