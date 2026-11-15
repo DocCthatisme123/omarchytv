@@ -1103,9 +1103,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        ColinHavenHome.pauseVideo();   // Colin's fork: free the 4K decoder once Home is really hidden (not on a Home-press pause)
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
-        ColinHavenHome.pauseVideo();   // Colin's fork: free the 4K decoder while away
         if (companion != null) { companion.setArmed(false); companion.stop(); }
         OmaFireLayer.onPause();
         resumed = false;
