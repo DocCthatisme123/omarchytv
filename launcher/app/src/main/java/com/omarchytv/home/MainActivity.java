@@ -152,6 +152,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         setContentView(R.layout.activity_main);
         Theme.apply(getWindow().getDecorView());
         BootScreenView.onCreate(this, findViewById(R.id.root));   // v2.14 boot screen (once per boot by default)
+        ColinHavenHome.attach(this, findViewById(R.id.root));   // Colin's fork: Holmes Haven bookshelf home
         current = new java.lang.ref.WeakReference<>(this);
         CrtOverlay.attach(this, findViewById(R.id.root), LauncherConfig.get(this).pluginRetroCrt);   // v2.14 Retro CRT plugin
         // Lights hub only while OmarchyTV is on screen; the snapshot ("Restore previous") is queued before the paint.
@@ -1001,6 +1002,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     protected void onResume() {
         super.onResume();
         BootScreenView.onResume(this, findViewById(R.id.root));
+        ColinHavenHome.show();   // Colin's fork
         OmaFireLayer.onResume(this, findViewById(R.id.wallpaper));   // v2.14 OmaFire animated wallpaper   // "wake" mode: replay after the screen came on
         bindCompanion();
         OmarchyLink.sweepCasts(this);   // 24 h cleanup of cast uploads (no-op when nothing was ever cast)
@@ -4184,6 +4186,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);   // HOME pressed while on home: wake up from the screensaver
+        ColinHavenHome.show();   // Colin's fork: Home brings the bookshelf back
         if (intent.getBooleanExtra(HomeCheck.EXTRA_ASK, false)) setIntent(intent);   // HomeCheck from boot
         if (Intent.ACTION_ASSIST.equals(intent.getAction())) setIntent(intent);   // mic key, handled in onResume
         hideSaver();
@@ -4209,6 +4212,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         }
         resetIdle();
         if (companion != null) companion.poke();   // any key wakes a sleeping companion
+        if (walker == null && (menu == null || !menu.isShowing()) && ColinHavenHome.consumeKey(e)) return true;   // Colin's fork
         if (walker == null && movingPos < 0 && (menu == null || !menu.isShowing()) && companionKey(e)) return true;
         if (walker != null) {
             if (walker.onKey(e)) return true;

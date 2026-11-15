@@ -418,6 +418,8 @@ final class LauncherConfig {
     /** v2.14 "Always-animated wallpaper" (default false): loop the theme's animated wallpaper while Home is on screen
      *  instead of playing it once and settling on the still. Video, Cinemarchy and the screensaver pause it (onPause). */
     final boolean wallpaperLoop;
+    /** Colin's fork: Holmes Haven bookshelf home over the stock one ("havenHome", default on). */
+    final boolean havenHome;
     /** v2.14 boot screen (BootScreenView): "boot" (default, once per TV boot), "wake" (also when the screen turns on), "off". */
     final String bootScreen;
     /** v2.14 boot screen scanlines and text glow (default true). */
@@ -742,6 +744,7 @@ final class LauncherConfig {
         pcBroadcast = lkWol != null && WakeOnLan.ipv4(lkWol.optString("broadcast", "")) ? lkWol.optString("broadcast") : "";
         wallpaperIntro = j == null || j.optBoolean("wallpaper_intro", j.optBoolean("wallpaperIntro", true));
         wallpaperLoop = j != null && j.optBoolean("wallpaperLoop", false);
+        havenHome = j == null || j.optBoolean("havenHome", true);
         bootScreen = bootScreenMode(j != null ? j.optString("bootScreen", "boot") : "boot");
         bootFx = j == null || j.optBoolean("bootFx", true);
         bootSound = j == null || j.optBoolean("bootSound", true);

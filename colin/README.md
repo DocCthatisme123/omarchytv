@@ -26,3 +26,10 @@ Replaces the terminal boot when `assets/holmes/` holds boot_bg.webp, emblem.webp
 ~/Slater/notes/holmes-haven, B2/A1/A2, sized for the 1080p UI). Same triggers as upstream (`"bootScreen"`: boot / wake / off),
 any key skips. About 6 s: room fades in with a slow push-in and twinkling stars, the emblem blooms, the wordmark rises, a glowing bar fills.
 Hooks: 4 lines in BootScreenView (show, consumeKey, isShowing, onDestroy). Delete assets/holmes/ to get the stock boot back.
+
+## Holmes Haven bookshelf home (ColinHavenHome.java)
+A layer over the stock home: the bear family room (B1; the sleeping family B3 from 22:00 to 06:00) with the apps as glowing
+neon books in the shelf. Up/Down pick, OK opens, Right (or the Technology book) slides it away to the stock OmarchyTV home,
+Home brings it back. Menu, Back, colour and media keys keep their OmarchyTV meaning. Clock and date top right.
+Books (edit BOOKS in the file): Storybooks=Netflix, Learning=YouTube, Music=YouTube Music, Discovery=Prime Video,
+Family=Live TV, Technology=stock home. Turn off with `"havenHome": false` in omarchytv.json.
