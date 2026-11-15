@@ -103,6 +103,8 @@ final class ColinVideoWallpaper {
                         if (resumeAt > 0 && resumeAt < m.getDuration()) m.seekTo(resumeAt);
                         m.start();
                         Log.i(TAG, "playing " + p + " " + m.getVideoWidth() + "x" + m.getVideoHeight());
+                        // Some players (this MediaTek one) never send VIDEO_RENDERING_START: assume the frame is up shortly after start.
+                        if (onFrame != null) sv.postDelayed(() -> { if (view == sv && player == m) onFrame.run(); }, 450);
                     });
                     mp.setOnErrorListener((m, what, extra) -> {
                         Log.w(TAG, "failed " + p + " what=" + what + " extra=" + extra + "; skipping it");
