@@ -334,11 +334,21 @@ final class ColinHavenHome extends View {
         c.drawBitmap(logo, null, r, img);
     }
 
-    /** Family workspaces 2-5: the library window, the logo, the number, and a note until they're designed. */
+    /** Colin's upscaled landscapes for 2-5 (holmes/ws2..ws5.webp); only the one on screen is kept in memory. */
+    private Bitmap wsArt;
+    private int wsArtFor;
+
+    /** Family workspaces 2-5: the page's landscape (else the library window), the logo, the number, and a note. */
     private void drawPage(Canvas c, int w, int h) {
-        if (pageBg != null) c.drawBitmap(pageBg, null, r, img);
+        if (wsArtFor != page) {
+            if (wsArt != null) wsArt.recycle();
+            wsArt = load(getContext(), "holmes/ws" + page + ".webp");
+            wsArtFor = page;
+        }
+        Bitmap bg = wsArt != null ? wsArt : pageBg;
+        if (bg != null) c.drawBitmap(bg, null, r, img);
         else c.drawColor(0xFF0B1B3B);
-        c.drawColor(0x66000000);
+        c.drawColor(wsArt != null ? 0x33000000 : 0x66000000);   // lighter dim over the landscapes
         drawLogo(c, w, h);
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(CREAM);
