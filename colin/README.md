@@ -28,8 +28,10 @@ any key skips. About 6 s: room fades in with a slow push-in and twinkling stars,
 Hooks: 4 lines in BootScreenView (show, consumeKey, isShowing, onDestroy). Delete assets/holmes/ to get the stock boot back.
 
 ## Holmes Haven bookshelf home (ColinHavenHome.java)
-A layer over the stock home: the bear family room (B1; the sleeping family B3 from 22:00 to 06:00) with the apps as glowing
-neon books (drawn in code, matching the concept render) in the shelf. Up/Down pick, OK opens, Right (or the Technology book) slides it away to the stock OmarchyTV home,
-Home brings it back. Menu, Back, colour and media keys keep their OmarchyTV meaning. Clock and date top right.
-Books (edit BOOKS in the file): Storybooks=Netflix, Learning=YouTube, Music=YouTube Music, Discovery=Prime Video,
-Family=Live TV, Technology=stock home. Turn off with `"havenHome": false` in omarchytv.json.
+A layer over the stock home: GPT's painted library room with six glowing books in the shelf (assets/holmes/home_master.webp)
+plus a painted "selected" version of each book (shelf_sel1..6.webp, shelf crops only; the full images were verified
+pixel-identical to the master outside the shelf). Up/Down crossfades to that book's shelf (160 ms), OK opens it, nothing is
+selected until the first key and it returns to the level books after 30 s idle. Right (or Technology) slides it away to the
+stock OmarchyTV home, Home brings it back. Clock and date top right. Art: ~/Slater/notes/holmes-haven/final-pack.
+Books: Storybooks=Netflix, Learning=YouTube, Music=YouTube Music, Discovery=Prime Video, Family=Live TV,
+Technology=stock home. No night variant yet (the old B3 doesn't match the new painting). Off: `"havenHome": false`.
