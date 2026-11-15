@@ -37,7 +37,7 @@ Books: Storybooks=Netflix, Learning=YouTube, Music=YouTube Music, Discovery=Prim
 Technology=stock home. No night variant yet (the old B3 doesn't match the new painting). Off: `"havenHome": false`.
 
 ## 10 workspaces (Colin's layout)
-1-5 are the family's: 1 = the Holmes Haven bookshelf, 2-5 = placeholders ("coming soon") until Colin and Mikayla design them.
+1-5 are the family's: 1 = the Holmes Haven bookshelf, 2-5 = placeholders ("coming soon") on the upscaled landscapes (ws2-5.webp: valley, lake, campfire, waterfall) until Colin and Mikayla design them.
 Marco's original five move to 6, 7, 8, 9, 0 (in his bar order). Number keys jump (0 = 10), CH+/CH- step through all ten,
 Left/Right step 1-5 (Right on 5 goes to 6), Back anywhere else returns to 1, Home always returns to 1, and the Technology
 book opens 8 (the app grid). Handled in ColinHavenHome.workspaceKey, one hook line above Marco's workspace keys.
