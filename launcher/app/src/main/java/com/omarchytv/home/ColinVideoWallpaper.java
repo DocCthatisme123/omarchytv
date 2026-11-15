@@ -30,6 +30,10 @@ final class ColinVideoWallpaper {
     private SurfaceView view;
     private MediaPlayer player;
     private SurfaceHolder holder;
+    /** Hold mode (one clip, many stills): -1 = normal looping wallpaper; else the ms to show and freeze on. */
+    private int holdMs = -1;
+    private boolean prepared;
+    private Runnable holdFrame;
     private String path;
     private int resumeAt;
 
@@ -123,13 +127,56 @@ final class ColinVideoWallpaper {
         return load(mp, view, holder, path, key(f), onFrame);
     }
 
+    /**
+     * Hold mode: play this clip (a strip of stills, one per segment) and freeze on the picture at {@code ms}.
+     * The first call starts the player; later calls only seek within the same stream, so the video never stops
+     * (no black gap, and the TV's picture processing doesn't re-adapt). onFrame once that picture is up.
+     */
+    boolean holdAt(Context c, ViewGroup root, File f, int ms, Runnable onFrame) {
+        if (!usable(f)) return false;
+        holdFrame = onFrame;
+        if (view != null && player != null && f.getAbsolutePath().equals(path)) {
+            holdMs = ms;
+            if (prepared) seekHold(player);
+            return true;
+        }
+        holdMs = ms;
+        prepared = false;
+        return startFile(c, root, f, null);
+    }
+
+    /** Seek to holdMs, play a moment so the frame is decoded and shown, then pause on it. */
+    private void seekHold(MediaPlayer m) {
+        final int target = holdMs;
+        final SurfaceView sv = view;
+        m.setOnSeekCompleteListener(mp -> {
+            if (player != mp || holdMs != target) return;
+            try {
+                mp.start();
+            } catch (Throwable ignored) {
+            }
+            if (sv != null) sv.postDelayed(() -> {
+                if (player == mp && holdMs == target) {
+                    try { mp.pause(); } catch (Throwable ignored) {}
+                    if (holdFrame != null) holdFrame.run();
+                }
+            }, 120);
+        });
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26) m.seekTo(target, MediaPlayer.SEEK_CLOSEST_SYNC);
+            else m.seekTo(target);
+        } catch (Throwable t) {
+            Log.w(TAG, "seek failed", t);
+        }
+    }
+
     /** Point the player at clip p on this surface, looping and muted; onFrame once its picture is up. */
     private boolean load(MediaPlayer mp, SurfaceView sv, SurfaceHolder h, String p, String k, Runnable onFrame) {
         try {
             mp.setDisplay(h);
             mp.setDataSource(p);
             mp.setVolume(0f, 0f);
-            mp.setLooping(true);
+            mp.setLooping(holdMs < 0);
             mp.setScreenOnWhilePlaying(false);
             mp.setOnVideoSizeChangedListener((m, w, hh) -> {
                 // Full-size buffer so the hardware scaler, not the GPU, fits it to the panel.
@@ -141,6 +188,12 @@ final class ColinVideoWallpaper {
             });
             mp.setOnPreparedListener(m -> {
                 if (!p.equals(path) || player != m) return;
+                prepared = true;
+                if (holdMs >= 0) {   // hold mode: show and freeze on one still
+                    Log.i(TAG, "holding " + p + " " + m.getVideoWidth() + "x" + m.getVideoHeight() + " at " + holdMs);
+                    seekHold(m);
+                    return;
+                }
                 if (resumeAt > 0 && resumeAt < m.getDuration()) m.seekTo(resumeAt);
                 m.start();
                 Log.i(TAG, "playing " + p + " " + m.getVideoWidth() + "x" + m.getVideoHeight());
@@ -168,6 +221,9 @@ final class ColinVideoWallpaper {
 
     void stop(ViewGroup root) {
         release();
+        prepared = false;
+        holdMs = -1;
+        holdFrame = null;
         if (view != null) {
             View v = view;
             view = null;

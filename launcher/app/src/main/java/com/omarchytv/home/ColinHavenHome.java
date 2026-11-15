@@ -169,6 +169,21 @@ final class ColinHavenHome extends View {
 
     private void syncVideo() {
         java.io.File dir = getContext().getExternalFilesDir("video");
+        // Preferred: one clip with all five stills (1 s each); switching only seeks, the video never stops.
+        java.io.File all = dir == null || hidden ? null : new java.io.File(dir, "haven-all.mp4");
+        if (ColinVideoWallpaper.usable(all)) {
+            final int want = page;
+            if (!video4k.playing()) videoOn = false;   // black until the first picture, then fade up
+            videoPage = page;
+            hideStock();
+            video4k.holdAt(getContext(), root, all, (page - 1) * 1000 + 100, () -> {
+                if (hidden || page != want) return;
+                if (!videoOn) videoOnAt = SystemClock.uptimeMillis();
+                videoOn = true;
+                invalidate();
+            });
+            return;
+        }
         java.io.File f = dir == null || hidden ? null : new java.io.File(dir, "haven-" + page + ".mp4");
         if (!ColinVideoWallpaper.usable(f)) {
             stopVideo();
@@ -462,17 +477,13 @@ final class ColinHavenHome extends View {
             img.setAlpha(255);
             fading |= t < 1f;
         }
-        if (leavingAt != 0) {   // opening a book: the room fades to black, the pulled-out book stays lit
+        if (leavingAt == 0) drawBar(c, w, h);
+        else {   // opening a book: the whole screen (book and bar too) fades to black, then the app opens
             float lv = Math.min(1f, (now - leavingAt) / (float) LEAVE_MS);
+            drawBar(c, w, h);
             c.drawColor(((int) (255 * lv) << 24));
-            if (sel >= 0 && shelf[sel] != null) {
-                r.set(w * SX, h * SY, w * (SX + SW), h * (SY + SH));
-                img.setAlpha(255);
-                c.drawBitmap(shelf[sel], null, r, img);
-            }
             fading |= lv < 1f;
         }
-        drawBar(c, w, h);
 
         if (fading) postInvalidateOnAnimation();
         else postInvalidateDelayed(1000);   // clock and idle check
