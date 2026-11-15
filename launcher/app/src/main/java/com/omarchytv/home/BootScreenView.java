@@ -116,7 +116,11 @@ final class BootScreenView extends View {
         if ("off".equals(mode)) return;
         SharedPreferences p = a.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         long boot = bootId();
-        if (p.getLong(SHOWN_BOOT, 0) == boot) return;   // already played since this boot
+        if (p.getLong(SHOWN_BOOT, 0) == boot) {   // already played since this boot
+            android.util.Log.i("HavenBoot", "onCreate: already played this boot (" + boot + "), mode " + mode);
+            return;
+        }
+        android.util.Log.i("HavenBoot", "onCreate: first start this boot (" + boot + "), mode " + mode);
         p.edit().putLong(SHOWN_BOOT, boot).apply();
         show(a, root);
     }

@@ -42,6 +42,8 @@ final class ColinHavenBoot extends View {
     private final RectF r = new RectF();
     private final float[] starX = new float[28], starY = new float[28], starPhase = new float[28];
     private long start;
+    /** 0 = waiting for the first frame that is really on screen; the timeline starts there, not at creation. */
+    private long waitingSince;
     private boolean fading, done, armed;
 
     private ColinHavenBoot(Context c, Bitmap bg, Bitmap emblem, Bitmap wordmark) {
@@ -73,7 +75,8 @@ final class ColinHavenBoot extends View {
         ColinHavenBoot v = showing;
         if (v == null || !v.armed) return false;
         v.armed = false;
-        v.start = SystemClock.uptimeMillis();
+        v.start = 0;   // the timeline starts on the first visible frame
+        android.util.Log.i("HavenBoot", "wake: playing");
         v.invalidate();
         return true;
     }
@@ -95,7 +98,8 @@ final class ColinHavenBoot extends View {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         v.bringToFront();
         v.setTranslationZ(10_000f);
-        v.start = SystemClock.uptimeMillis();
+        v.start = 0;   // the timeline starts on the first visible frame (cold boot: Home's first frame can be seconds late)
+        android.util.Log.i("HavenBoot", "shown, waiting for the first visible frame");
         v.invalidate();
         return true;
     }
@@ -135,6 +139,16 @@ final class ColinHavenBoot extends View {
         int w = getWidth(), h = getHeight();
         c.drawColor(0xFF000000);
         if (w == 0 || h == 0 || armed) return;   // armed: black cover, no animation until the screen is back
+        if (start == 0) {   // hold on black until the window is really showing (focus), max 10 s
+            long now0 = SystemClock.uptimeMillis();
+            if (waitingSince == 0) waitingSince = now0;
+            if (!hasWindowFocus() && now0 - waitingSince < 10_000) {
+                postInvalidateDelayed(50);
+                return;
+            }
+            start = now0;
+            android.util.Log.i("HavenBoot", "timeline started after " + (now0 - waitingSince) + " ms (focus=" + hasWindowFocus() + ")");
+        }
         int ms = (int) (SystemClock.uptimeMillis() - start);
         float t = ms / (float) TOTAL;
 
