@@ -49,3 +49,11 @@ Android draws app UI at 1080p on this TV; only the video plane is 4K. So each fa
 ColinHavenHome. Until its first frame is up the 1080p picture shows (no black flash); then the view turns see-through and
 Marco's home underneath is hidden. On workspace 1 the selected book's shelf crop is still drawn on top at 1080p.
 Paused in onPause, restarted on Home. No clip = 1080p as before.
+
+## Floating Omarchy bar on the family workspaces (Colin's layout)
+No background, everything shadowed so it floats. Middle: the Holmes Haven logo with the date and time to its right
+(Marco's bar style, CaskaydiaMono). Right: Marco's seven tray icons (Cinemarchy, Arcade, Wi-Fi, Bluetooth, volume,
+inputs, PC screen), same actions via HomeV29.barClick(i). On 2-5 the left has our emblem (where Omarchy has its logo)
+and 1 2 3 4 5, the current one bold and underlined, the rest faded; workspace 1 has no numbers.
+Up from the top book (or from 2-5) goes to the bar, Left/Right along the icons, OK runs it, Down comes back.
+The 1080p picture now fades out over 350 ms once the 4K clip is up, instead of switching.

@@ -1631,6 +1631,11 @@ final class HomeV29 extends FrameLayout {
         focusApp(lastApp);
     }
 
+    /** Colin's fork: run bar icon i's action (Holmes Haven's floating bar mirrors these icons). */
+    void barClick(int i) {
+        if (i >= 0 && i < barIcons.size()) barIcons.get(i).performClick();
+    }
+
     int barHeight() {
         return px(52);
     }

@@ -152,7 +152,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         setContentView(R.layout.activity_main);
         Theme.apply(getWindow().getDecorView());
         BootScreenView.onCreate(this, findViewById(R.id.root));   // v2.14 boot screen (once per boot by default)
-        ColinHavenHome.attach(this, findViewById(R.id.root), this::setWorkspace, () -> workspace);   // Colin's fork: Holmes Haven home
+        ColinHavenHome.attach(this, findViewById(R.id.root), this::setWorkspace, () -> workspace,
+                i -> { if (home != null) home.barClick(i); });   // Colin's fork: Holmes Haven home
         current = new java.lang.ref.WeakReference<>(this);
         CrtOverlay.attach(this, findViewById(R.id.root), LauncherConfig.get(this).pluginRetroCrt);   // v2.14 Retro CRT plugin
         // Lights hub only while OmarchyTV is on screen; the snapshot ("Restore previous") is queued before the paint.

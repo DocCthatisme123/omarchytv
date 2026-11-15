@@ -62,7 +62,7 @@ final class ColinHavenHome extends View {
 
     /** Where the shelf crops sit, as fractions of the screen (source box x 60..600, y 230..880 of 1672x941). */
     private static final float SX = 60f / 1672f, SY = 230f / 941f, SW = 540f / 1672f, SH = 650f / 941f;
-    private static final int FADE_MS = 160, IDLE_MS = 30_000, CREAM = 0xFFFFF6E6;
+    private static final int FADE_MS = 160, IDLE_MS = 30_000, CREAM = 0xFFFFF6E6, GOLD_BAR = 0xFFFFC94D;
 
     private static ColinHavenHome view;
     /** The stock home's own workspaces (MainActivity.setWorkspace / its current one). */
@@ -91,6 +91,16 @@ final class ColinHavenHome extends View {
     private FrameLayout root;
     private int videoPage;
     private boolean videoOn;
+    /** When the 4K frame came up: the 1080p picture fades out over FADE_4K_MS instead of switching (no flicker). */
+    private long videoOnAt;
+    private static final int FADE_4K_MS = 350;
+    /** Floating Omarchy bar: Marco's right-hand icons (same actions), -1 = not focused. */
+    private int barFocus = -1;
+    private static final int[] BAR_ICONS = {R.drawable.ln_cinemarchy, R.drawable.ln_arcade, R.drawable.ln_wifi,
+            R.drawable.ln_bt, R.drawable.ln_vol, R.drawable.ln_input, R.drawable.ln_monitor};
+    private final android.graphics.drawable.Drawable[] barIcons = new android.graphics.drawable.Drawable[BAR_ICONS.length];
+    private static java.util.function.IntConsumer barClick;
+    private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final java.util.List<View> hiddenStock = new java.util.ArrayList<>();
 
     private ColinHavenHome(Context c, Bitmap master) {
@@ -98,6 +108,11 @@ final class ColinHavenHome extends View {
         this.master = master;
         pageBg = load(c, "holmes/boot_bg.webp");
         logo = load(c, "holmes/logo_bar.webp");
+        for (int i = 0; i < BAR_ICONS.length; i++) {
+            barIcons[i] = c.getDrawable(BAR_ICONS[i]);
+            if (barIcons[i] != null) barIcons[i] = barIcons[i].mutate();
+        }
+        bar.setTypeface(CastUi.font(c));
         for (int i = 0; i < BOOKS.length; i++) shelf[i] = load(c, "holmes/shelf_sel" + (i + 1) + ".webp");
         Typeface serif = Typeface.create(Typeface.SERIF, Typeface.BOLD);
         text.setTypeface(serif);
@@ -110,8 +125,9 @@ final class ColinHavenHome extends View {
 
     /** From MainActivity.onCreate, after setContentView. */
     static void attach(Activity a, FrameLayout root, java.util.function.IntConsumer setStock,
-                       java.util.function.IntSupplier getStock) {
+                       java.util.function.IntSupplier getStock, java.util.function.IntConsumer clickBarIcon) {
         view = null;
+        barClick = clickBarIcon;
         stockSet = setStock;
         stockGet = getStock;
         if (root == null || !LauncherConfig.get(a).havenHome) return;
@@ -137,6 +153,7 @@ final class ColinHavenHome extends View {
         v.setTranslationX(0f);
         v.prev = v.sel = -1;
         v.page = 1;
+        v.barFocus = -1;
         v.syncVideo();
         v.invalidate();
     }
@@ -161,6 +178,7 @@ final class ColinHavenHome extends View {
         video4k.startFile(getContext(), root, f, () -> {
             if (hidden || page != want || videoPage != want) return;
             videoOn = true;
+            videoOnAt = SystemClock.uptimeMillis();
             hideStock();
             invalidate();
         });
@@ -208,6 +226,7 @@ final class ColinHavenHome extends View {
             if (v.hidden) show();
             v.page = n;
             v.prev = v.sel = -1;
+            v.barFocus = -1;
             v.syncVideo();
             v.invalidate();
             return;
@@ -253,7 +272,33 @@ final class ColinHavenHome extends View {
         boolean press = down && e.getRepeatCount() == 0;
         if (down) v.lastKey = SystemClock.uptimeMillis();
         int kc = e.getKeyCode();
-        if (v.page != 1) {   // family workspaces 2-5: Left/Right step, the rest waits for its design
+        boolean ok = kc == KeyEvent.KEYCODE_DPAD_CENTER || kc == KeyEvent.KEYCODE_ENTER || kc == KeyEvent.KEYCODE_NUMPAD_ENTER;
+
+        if (v.barFocus >= 0) {   // in the floating bar: Left/Right along the icons, OK runs Marco's action, Down leaves
+            switch (kc) {
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    if (down) v.barFocus = Math.max(0, v.barFocus - 1);
+                    break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (down) v.barFocus = Math.min(BAR_ICONS.length - 1, v.barFocus + 1);
+                    break;
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                    if (down) v.barFocus = -1;
+                    break;
+                case KeyEvent.KEYCODE_DPAD_UP:
+                    break;
+                default:
+                    if (ok) {
+                        if (press && barClick != null) barClick.accept(v.barFocus);
+                        break;
+                    }
+                    return false;
+            }
+            v.invalidate();
+            return true;
+        }
+
+        if (v.page != 1) {   // family workspaces 2-5: Left/Right step, Up to the bar, the rest waits for its design
             if (kc == KeyEvent.KEYCODE_DPAD_LEFT) {
                 if (press) go(v.getContext(), v.page - 1);
                 return true;
@@ -262,12 +307,19 @@ final class ColinHavenHome extends View {
                 if (press) go(v.getContext(), v.page + 1);
                 return true;
             }
-            return kc == KeyEvent.KEYCODE_DPAD_UP || kc == KeyEvent.KEYCODE_DPAD_DOWN
-                    || kc == KeyEvent.KEYCODE_DPAD_CENTER || kc == KeyEvent.KEYCODE_ENTER;
+            if (kc == KeyEvent.KEYCODE_DPAD_UP) {
+                if (press) v.toBar();
+                return true;
+            }
+            return kc == KeyEvent.KEYCODE_DPAD_DOWN || ok;
         }
         switch (kc) {
-            case KeyEvent.KEYCODE_DPAD_UP:
-                if (down) v.move(-1);
+            case KeyEvent.KEYCODE_DPAD_UP:   // Up from the top book (or with nothing picked) goes to the bar
+                if (down) {
+                    if (v.sel <= 0) {
+                        if (press) v.toBar();
+                    } else v.move(-1);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 if (down) v.move(1);
@@ -275,7 +327,7 @@ final class ColinHavenHome extends View {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                if (down && e.getRepeatCount() == 0) {
+                if (press) {
                     if (v.sel < 0) v.select(0);   // first press only picks a book
                     else v.open(BOOKS[v.sel]);
                 }
@@ -288,6 +340,12 @@ final class ColinHavenHome extends View {
             default:
                 return false;   // Menu, Back, colour and media keys keep their OmarchyTV meaning
         }
+    }
+
+    private void toBar() {
+        barFocus = BAR_ICONS.length - 1;   // start on the right end, like reaching up to the tray
+        if (sel >= 0) select(-1);
+        invalidate();
     }
 
     // ---- behaviour ----
@@ -349,75 +407,134 @@ final class ColinHavenHome extends View {
         if (w == 0 || h == 0) return;
         long now = SystemClock.uptimeMillis();
         if (sel >= 0 && now - lastKey > IDLE_MS && now - changedAt > IDLE_MS) select(-1);   // idle: back to level books
+        if (barFocus >= 0 && now - lastKey > IDLE_MS) barFocus = -1;
 
+        // 1080p picture: fully drawn until the 4K frame is up, then a soft fade (the 4K clip shows through).
+        float pic = videoOn ? 1f - Math.min(1f, (now - videoOnAt) / (float) FADE_4K_MS) : 1f;
+        boolean fading = videoOn && pic > 0f;
         img.setAlpha(255);
         r.set(0, 0, w, h);
         if (page != 1) {
-            drawPage(c, w, h);
-            return;
+            drawPage(c, w, h, pic);
+        } else {
+            if (pic > 0f) {
+                img.setAlpha((int) (255 * pic));
+                c.drawBitmap(master, null, r, img);
+                img.setAlpha(255);
+            }
+            // Shelf: the previous selection fading out under the new one fading in (both identical to the
+            // master outside their own book, so the crossfade only moves the books).
+            float t = Math.min(1f, (now - changedAt) / (float) FADE_MS);
+            r.set(w * SX, h * SY, w * (SX + SW), h * (SY + SH));
+            if (prev >= 0 && shelf[prev] != null && t < 1f) {
+                img.setAlpha((int) (255 * (1f - t)));
+                c.drawBitmap(shelf[prev], null, r, img);
+            }
+            if (sel >= 0 && shelf[sel] != null) {
+                img.setAlpha((int) (255 * t));
+                c.drawBitmap(shelf[sel], null, r, img);
+            }
+            img.setAlpha(255);
+            fading |= t < 1f;
         }
-        if (!videoOn) c.drawBitmap(master, null, r, img);   // else the 4K clip shows through
+        drawBar(c, w, h);
 
-        // Shelf: the previous selection fading out under the new one fading in (both identical to the master
-        // outside their own book, so the crossfade only moves the books).
-        float t = Math.min(1f, (now - changedAt) / (float) FADE_MS);
-        r.set(w * SX, h * SY, w * (SX + SW), h * (SY + SH));
-        if (prev >= 0 && shelf[prev] != null && t < 1f) {
-            img.setAlpha((int) (255 * (1f - t)));
-            c.drawBitmap(shelf[prev], null, r, img);
-        }
-        if (sel >= 0 && shelf[sel] != null) {
-            img.setAlpha((int) (255 * t));
-            c.drawBitmap(shelf[sel], null, r, img);
-        }
-        img.setAlpha(255);
-        drawLogo(c, w, h);
-
-        // Clock and date, top right, on the calm sky.
-        Date d = new Date();
-        text.setTextAlign(Paint.Align.RIGHT);
-        text.setTextSize(h * 0.075f);
-        text.setColor(CREAM);
-        text.setShadowLayer(h * 0.012f, 0, 0, 0xCC000000);
-        c.drawText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(d), w * 0.965f, h * 0.105f, text);
-        small.setTextAlign(Paint.Align.RIGHT);
-        small.setTextSize(h * 0.028f);
-        small.setColor(0xFFE2E8F0);
-        small.setShadowLayer(h * 0.008f, 0, 0, 0xCC000000);
-        c.drawText(new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(d), w * 0.965f, h * 0.15f, small);
-
-        if (t < 1f) postInvalidateOnAnimation();
+        if (fading) postInvalidateOnAnimation();
         else postInvalidateDelayed(1000);   // clock and idle check
     }
 
-    /** Holmes Haven logo (emblem + wordmark) in the dark sky, top centre. */
-    private void drawLogo(Canvas c, int w, int h) {
-        if (logo == null) return;
-        float lh = h * 0.095f, lw = lh * logo.getWidth() / logo.getHeight(), lx = w * 0.5f - lw / 2f - w * 0.02f, ly = h * 0.013f;
-        r.set(lx, ly, lx + lw, ly + lh);
-        img.setAlpha(255);
-        c.drawBitmap(logo, null, r, img);
+    /**
+     * Floating Omarchy bar (no background, everything with a soft shadow): our logo + time/date in the middle,
+     * Marco's tray icons on the right; on 2-5 also the workspace numbers on the left (this one bold, the rest faded)
+     * after our emblem, where Omarchy has its logo. Workspace 1 stays clean: no numbers.
+     */
+    private void drawBar(Canvas c, int w, int h) {
+        float bh = h * 0.048f, cy = bh * 0.55f + h * 0.008f;
+        // centre: logo, and the time/date to its right
+        if (logo != null) {
+            float lh = h * 0.080f, lw = lh * logo.getWidth() / logo.getHeight(), lx = w * 0.5f - lw - w * 0.008f, ly = cy - lh / 2f;
+            r.set(lx, ly, lx + lw, ly + lh);
+            img.setAlpha(255);
+            c.drawBitmap(logo, null, r, img);
+        }
+        Date d = new Date();
+        String when = new SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(d).toLowerCase(Locale.getDefault())
+                + "   " + new SimpleDateFormat("HH:mm", Locale.getDefault()).format(d);
+        bar.setTextSize(h * 0.026f);
+        bar.setTextAlign(Paint.Align.LEFT);
+        bar.setColor(CREAM);
+        bar.setShadowLayer(h * 0.008f, 0, 0, 0xE6000000);
+        bar.setFakeBoldText(false);
+        Paint.FontMetrics fm = bar.getFontMetrics();
+        float base = cy - (fm.ascent + fm.descent) / 2f;
+        c.drawText(when, w * 0.5f + w * 0.008f, base, bar);
+
+        // right: Marco's tray icons, same order and actions
+        float isz = h * 0.024f, step = h * 0.046f, x = w - w * 0.02f - step * BAR_ICONS.length;
+        for (int i = 0; i < BAR_ICONS.length; i++) {
+            android.graphics.drawable.Drawable ic = barIcons[i];
+            float ix = x + i * step + (step - isz) / 2f;
+            if (ic != null) {
+                ic.setTint(barFocus == i ? GOLD_BAR : CREAM);
+                ic.setBounds((int) ix, (int) (cy - isz / 2f), (int) (ix + isz), (int) (cy + isz / 2f));
+                // soft shadow: draw a dark copy slightly larger behind it
+                ic.setTint(0x99000000);
+                ic.setBounds((int) ix + 1, (int) (cy - isz / 2f) + 2, (int) (ix + isz) + 1, (int) (cy + isz / 2f) + 2);
+                ic.draw(c);
+                ic.setTint(barFocus == i ? GOLD_BAR : CREAM);
+                ic.setBounds((int) ix, (int) (cy - isz / 2f), (int) (ix + isz), (int) (cy + isz / 2f));
+                ic.draw(c);
+            }
+            if (barFocus == i) {   // Waybar focus: 3 px underline
+                bar.setColor(GOLD_BAR);
+                c.drawRect(ix - isz * 0.2f, cy + isz * 0.85f, ix + isz * 1.2f, cy + isz * 0.85f + 3f, bar);
+            }
+        }
+
+        // left (2-5 only): our emblem where Omarchy has its logo, then 1 2 3 4 5, this one bold
+        if (page != 1) {
+            float lx = w * 0.02f;
+            if (logo != null) {   // the emblem is the left part of the logo lockup
+                float eh = h * 0.040f, srcW = logo.getHeight();   // emblem is roughly square at the left of the lockup
+                android.graphics.Rect src = new android.graphics.Rect(0, 0, (int) srcW, logo.getHeight());
+                r.set(lx, cy - eh / 2f, lx + eh, cy + eh / 2f);
+                c.drawBitmap(logo, src, r, img);
+                lx += eh + w * 0.012f;
+            }
+            bar.setTextSize(h * 0.026f);
+            for (int n = 1; n <= 5; n++) {
+                boolean on = n == page;
+                bar.setFakeBoldText(on);
+                bar.setColor(on ? CREAM : 0x73FFF6E6);
+                c.drawText(String.valueOf(n), lx, base, bar);
+                if (on) {   // Waybar active marker
+                    float tw = bar.measureText(String.valueOf(n));
+                    c.drawRect(lx - 2f, cy + h * 0.016f, lx + tw + 2f, cy + h * 0.016f + 3f, bar);
+                }
+                lx += h * 0.042f;
+            }
+            bar.setFakeBoldText(false);
+        }
     }
 
     /** Colin's upscaled landscapes for 2-5 (holmes/ws2..ws5.webp); only the one on screen is kept in memory. */
     private Bitmap wsArt;
     private int wsArtFor;
 
-    /** Family workspaces 2-5: the page's landscape (else the library window), the logo, the number, and a note. */
-    private void drawPage(Canvas c, int w, int h) {
+    /** Family workspaces 2-5: the page's landscape (1080p until its 4K clip is up), the number and a note. */
+    private void drawPage(Canvas c, int w, int h, float pic) {
         if (wsArtFor != page) {
             if (wsArt != null) wsArt.recycle();
             wsArt = load(getContext(), "holmes/ws" + page + ".webp");
             wsArtFor = page;
         }
         Bitmap bg = wsArt != null ? wsArt : pageBg;
-        if (videoOn) c.drawColor(0x22000000);   // the 4K clip shows through; a whisper of dim for the text
-        else {
+        if (pic > 0f) {
+            img.setAlpha((int) (255 * pic));
             if (bg != null) c.drawBitmap(bg, null, r, img);
             else c.drawColor(0xFF0B1B3B);
-            c.drawColor(wsArt != null ? 0x33000000 : 0x66000000);   // lighter dim over the landscapes
+            img.setAlpha(255);
         }
-        drawLogo(c, w, h);
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(CREAM);
         text.setShadowLayer(h * 0.02f, 0, 0, 0xCC000000);
@@ -428,9 +545,5 @@ final class ColinHavenHome extends View {
         small.setShadowLayer(h * 0.01f, 0, 0, 0xCC000000);
         small.setTextSize(h * 0.034f);
         c.drawText("A space for the Holmes family, coming soon", w * 0.528f, h * 0.65f, small);
-        small.setTextSize(h * 0.024f);
-        small.setColor(0xB3FFF6E6);
-        c.drawText("\u2039  " + (page - 1) + "      " + (page == 5 ? 6 : page + 1) + "  \u203A", w * 0.528f, h * 0.72f, small);
-        postInvalidateDelayed(1000);
     }
 }
