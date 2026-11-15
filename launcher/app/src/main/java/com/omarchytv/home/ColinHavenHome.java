@@ -81,6 +81,17 @@ final class ColinHavenHome extends View {
     private boolean hidden;
     /** The family workspace showing, 1..5 (1 = the bookshelf). */
     private int page = 1;
+    /**
+     * True 4K: Android draws app UI at 1080p on this TV, only the video plane is 4K. So each family workspace's
+     * background can be a still 4K clip (files/video/haven-N.mp4, every frame the same picture) on a SurfaceView
+     * behind this view. Once its first frame is up we stop drawing the 1080p bitmap (this view turns see-through)
+     * and hide Marco's home underneath so it can't show through. No clip = the 1080p bitmap, as before.
+     */
+    private final ColinVideoWallpaper video4k = new ColinVideoWallpaper();
+    private FrameLayout root;
+    private int videoPage;
+    private boolean videoOn;
+    private final java.util.List<View> hiddenStock = new java.util.ArrayList<>();
 
     private ColinHavenHome(Context c, Bitmap master) {
         super(c);
@@ -107,6 +118,7 @@ final class ColinHavenHome extends View {
         Bitmap m = load(a, "holmes/home_master.webp");
         if (m == null) return;
         ColinHavenHome v = new ColinHavenHome(a, m);
+        v.root = root;
         root.addView(v, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         v.bringToFront();
@@ -125,7 +137,58 @@ final class ColinHavenHome extends View {
         v.setTranslationX(0f);
         v.prev = v.sel = -1;
         v.page = 1;
+        v.syncVideo();
         v.invalidate();
+    }
+
+    /** From MainActivity.onPause: release the 4K decoder while Home isn't in front (show() restarts it). */
+    static void pauseVideo() {
+        ColinHavenHome v = view;
+        if (v != null) v.stopVideo();
+    }
+
+    private void syncVideo() {
+        java.io.File dir = getContext().getExternalFilesDir("video");
+        java.io.File f = dir == null || hidden ? null : new java.io.File(dir, "haven-" + page + ".mp4");
+        if (!ColinVideoWallpaper.usable(f)) {
+            stopVideo();
+            return;
+        }
+        if (videoPage == page && video4k.playing()) return;
+        videoOn = false;   // draw the 1080p picture until the 4K frame is up
+        videoPage = page;
+        final int want = page;
+        video4k.startFile(getContext(), root, f, () -> {
+            if (hidden || page != want || videoPage != want) return;
+            videoOn = true;
+            hideStock();
+            invalidate();
+        });
+    }
+
+    private void stopVideo() {
+        video4k.stop(root);
+        videoOn = false;
+        videoPage = 0;
+        restoreStock();
+        invalidate();
+    }
+
+    /** Hide Marco's home (every other root child except our 4K surface and the boot screen) while the video shows. */
+    private void hideStock() {
+        if (root == null) return;
+        View surface = video4k.surface();
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View ch = root.getChildAt(i);
+            if (ch == this || ch == surface || ch.getTranslationZ() >= 9_000f || ch.getVisibility() != VISIBLE) continue;
+            ch.setVisibility(INVISIBLE);
+            hiddenStock.add(ch);
+        }
+    }
+
+    private void restoreStock() {
+        for (View ch : hiddenStock) if (ch.getVisibility() == INVISIBLE) ch.setVisibility(VISIBLE);
+        hiddenStock.clear();
     }
 
     /** Workspace number 1..10 the TV is on (10 shows as "0"). */
@@ -145,6 +208,7 @@ final class ColinHavenHome extends View {
             if (v.hidden) show();
             v.page = n;
             v.prev = v.sel = -1;
+            v.syncVideo();
             v.invalidate();
             return;
         }
@@ -264,6 +328,7 @@ final class ColinHavenHome extends View {
     /** Slide the bookshelf away to the left and reveal the stock OmarchyTV home. */
     private void hide() {
         hidden = true;
+        stopVideo();
         animate().translationX(-getWidth() * 0.35f).alpha(0f).setDuration(260)
                 .withEndAction(() -> { if (hidden) setVisibility(GONE); }).start();
     }
@@ -291,7 +356,7 @@ final class ColinHavenHome extends View {
             drawPage(c, w, h);
             return;
         }
-        c.drawBitmap(master, null, r, img);
+        if (!videoOn) c.drawBitmap(master, null, r, img);   // else the 4K clip shows through
 
         // Shelf: the previous selection fading out under the new one fading in (both identical to the master
         // outside their own book, so the crossfade only moves the books).
@@ -346,9 +411,12 @@ final class ColinHavenHome extends View {
             wsArtFor = page;
         }
         Bitmap bg = wsArt != null ? wsArt : pageBg;
-        if (bg != null) c.drawBitmap(bg, null, r, img);
-        else c.drawColor(0xFF0B1B3B);
-        c.drawColor(wsArt != null ? 0x33000000 : 0x66000000);   // lighter dim over the landscapes
+        if (videoOn) c.drawColor(0x22000000);   // the 4K clip shows through; a whisper of dim for the text
+        else {
+            if (bg != null) c.drawBitmap(bg, null, r, img);
+            else c.drawColor(0xFF0B1B3B);
+            c.drawColor(wsArt != null ? 0x33000000 : 0x66000000);   // lighter dim over the landscapes
+        }
         drawLogo(c, w, h);
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(CREAM);

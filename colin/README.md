@@ -42,3 +42,10 @@ Marco's original five move to 6, 7, 8, 9, 0 (in his bar order). Number keys jump
 Left/Right step 1-5 (Right on 5 goes to 6), Back anywhere else returns to 1, Home always returns to 1, and the Technology
 book opens 8 (the app grid). Handled in ColinHavenHome.workspaceKey, one hook line above Marco's workspace keys.
 The Holmes Haven logo (assets/holmes/logo_bar.webp) sits in the sky, top centre, on the family workspaces.
+
+## True 4K on the family workspaces
+Android draws app UI at 1080p on this TV; only the video plane is 4K. So each family workspace can have a still 4K clip
+(`files/video/haven-1.mp4` .. `haven-5.mp4`, every frame the same picture, made by Nook) played on a SurfaceView behind
+ColinHavenHome. Until its first frame is up the 1080p picture shows (no black flash); then the view turns see-through and
+Marco's home underneath is hidden. On workspace 1 the selected book's shelf crop is still drawn on top at 1080p.
+Paused in onPause, restarted on Home. No clip = 1080p as before.

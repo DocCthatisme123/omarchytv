@@ -48,12 +48,28 @@ final class ColinVideoWallpaper {
 
     /** Start the video behind the UI (at index 1, just above the still wallpaper). True if a clip is playing/starting. */
     boolean start(Context c, ViewGroup root, String theme) {
-        File f = clipFor(c, theme);
+        return startFile(c, root, clipFor(c, theme), null);
+    }
+
+    /** True if a playable clip exists at this path (not marked broken). */
+    static boolean usable(File f) {
+        return f != null && f.isFile() && f.length() > 0 && !broken.contains(key(f));
+    }
+
+    /**
+     * Play this clip behind the UI. {@code onFrame} runs on the UI thread once its first frame is on screen
+     * (or never, if it fails). True if a clip is playing/starting.
+     */
+    boolean startFile(Context c, ViewGroup root, File f, Runnable onFrame) {
+        if (!usable(f)) f = null;
         if (f == null || root == null) {
             stop(root);
             return false;
         }
-        if (view != null && f.getAbsolutePath().equals(path)) return true;
+        if (view != null && f.getAbsolutePath().equals(path)) {
+            if (onFrame != null && player != null) view.post(onFrame);   // already playing
+            return true;
+        }
         stop(root);
         if (!f.getAbsolutePath().equals(path)) resumeAt = 0;
         path = f.getAbsolutePath();
@@ -78,6 +94,10 @@ final class ColinVideoWallpaper {
                     mp.setOnVideoSizeChangedListener((m, w, hh) -> {
                         // Full-size buffer so the hardware scaler, not the GPU, fits it to the panel.
                         if (w > 0 && hh > 0 && view == sv) h.setFixedSize(w, hh);
+                    });
+                    mp.setOnInfoListener((m, what, extra) -> {
+                        if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START && onFrame != null && view == sv) sv.post(onFrame);
+                        return false;
                     });
                     mp.setOnPreparedListener(m -> {
                         if (resumeAt > 0 && resumeAt < m.getDuration()) m.seekTo(resumeAt);
@@ -104,6 +124,9 @@ final class ColinVideoWallpaper {
     }
 
     boolean playing() { return view != null; }
+
+    /** The SurfaceView it plays on, or null. */
+    View surface() { return view; }
 
     void stop(ViewGroup root) {
         release();
