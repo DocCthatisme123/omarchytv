@@ -485,16 +485,10 @@ final class ColinHavenHome extends View {
      */
     private void drawBar(Canvas c, int w, int h) {
         float bh = h * 0.048f, cy = bh * 0.55f + h * 0.008f;
-        // centre: logo, and the time/date to its right
-        if (logo != null) {
-            float lh = h * 0.080f, lw = lh * logo.getWidth() / logo.getHeight(), lx = w * 0.5f - lw - w * 0.008f, ly = cy - lh / 2f;
-            r.set(lx, ly, lx + lw, ly + lh);
-            img.setAlpha(255);
-            c.drawBitmap(logo, null, r, img);
-        }
         Date d = new Date();
-        String when = new SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(d).toLowerCase(Locale.getDefault())
-                + "   " + new SimpleDateFormat("HH:mm", Locale.getDefault()).format(d);
+        String time = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(d);
+        String date = new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(d);
+        // the bar's own text (workspace numbers) keeps Marco's mono font; its baseline:
         bar.setTextSize(h * 0.026f);
         bar.setTextAlign(Paint.Align.LEFT);
         bar.setColor(CREAM);
@@ -502,7 +496,40 @@ final class ColinHavenHome extends View {
         bar.setFakeBoldText(false);
         Paint.FontMetrics fm = bar.getFontMetrics();
         float base = cy - (fm.ascent + fm.descent) / 2f;
-        c.drawText(when, w * 0.5f + w * 0.008f, base, bar);
+        if (page == 1) {
+            // Workspace 1 (Colin's pick): logo centred, the big clock and full date in the top right corner,
+            // just under the tray icons, in the bookshelf's serif.
+            if (logo != null) {
+                float lh = h * 0.095f, lw = lh * logo.getWidth() / logo.getHeight(), lx = w * 0.5f - lw / 2f - w * 0.02f, ly = h * 0.013f;
+                r.set(lx, ly, lx + lw, ly + lh);
+                img.setAlpha(255);
+                c.drawBitmap(logo, null, r, img);
+            }
+            text.setTextAlign(Paint.Align.RIGHT);
+            text.setTextSize(h * 0.075f);
+            text.setColor(CREAM);
+            text.setShadowLayer(h * 0.012f, 0, 0, 0xCC000000);
+            c.drawText(time, w * 0.965f, h * 0.145f, text);
+            small.setTextAlign(Paint.Align.RIGHT);
+            small.setTextSize(h * 0.028f);
+            small.setColor(0xFFE2E8F0);
+            small.setShadowLayer(h * 0.008f, 0, 0, 0xCC000000);
+            c.drawText(date, w * 0.965f, h * 0.19f, small);
+        } else {
+            // Workspaces 2-5: logo and, to its right, the date and time in the same serif as workspace 1.
+            if (logo != null) {
+                float lh = h * 0.080f, lw = lh * logo.getWidth() / logo.getHeight(), lx = w * 0.5f - lw - w * 0.008f, ly = cy - lh / 2f;
+                r.set(lx, ly, lx + lw, ly + lh);
+                img.setAlpha(255);
+                c.drawBitmap(logo, null, r, img);
+            }
+            small.setTextAlign(Paint.Align.LEFT);
+            small.setTextSize(h * 0.030f);
+            small.setColor(CREAM);
+            small.setShadowLayer(h * 0.008f, 0, 0, 0xE6000000);
+            Paint.FontMetrics sm = small.getFontMetrics();
+            c.drawText(date + "   " + time, w * 0.5f + w * 0.008f, cy - (sm.ascent + sm.descent) / 2f, small);
+        }
 
         // right: Marco's tray icons, same order and actions
         float isz = h * 0.024f, step = h * 0.046f, x = w - w * 0.02f - step * BAR_ICONS.length;
