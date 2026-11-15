@@ -93,7 +93,9 @@ final class ColinHavenHome extends View {
     private boolean videoOn;
     /** When the 4K frame came up: the 1080p picture fades out over FADE_4K_MS instead of switching (no flicker). */
     private long videoOnAt;
-    private static final int FADE_4K_MS = 350;
+    private static final int FADE_4K_MS = 350, LEAVE_MS = 160;
+    /** Opening a book: when the fade to black started (0 = not leaving). */
+    private long leavingAt;
     /** Floating Omarchy bar: Marco's right-hand icons (same actions), -1 = not focused. */
     private int barFocus = -1;
     private static final int[] BAR_ICONS = {R.drawable.ln_cinemarchy, R.drawable.ln_arcade, R.drawable.ln_wifi,
@@ -154,6 +156,7 @@ final class ColinHavenHome extends View {
         v.prev = v.sel = -1;
         v.page = 1;
         v.barFocus = -1;
+        v.leavingAt = 0;
         v.syncVideo();
         v.invalidate();
     }
@@ -172,16 +175,20 @@ final class ColinHavenHome extends View {
             return;
         }
         if (videoPage == page && video4k.playing()) return;
-        videoOn = false;   // draw the 1080p picture until the 4K frame is up
         videoPage = page;
         final int want = page;
-        video4k.startFile(getContext(), root, f, () -> {
+        Runnable up = () -> {
             if (hidden || page != want || videoPage != want) return;
+            if (!videoOn) videoOnAt = SystemClock.uptimeMillis();   // first picture: fade up from black
             videoOn = true;
-            videoOnAt = SystemClock.uptimeMillis();
             hideStock();
             invalidate();
-        });
+        };
+        // Already showing a 4K picture: swap the clip in the same player (old 4K stays until the new one is up).
+        if (videoOn && video4k.switchTo(f, up)) return;
+        videoOn = false;   // black until the first 4K frame, then it fades up (no 1080p step)
+        hideStock();
+        video4k.startFile(getContext(), root, f, up);
     }
 
     private void stopVideo() {
@@ -368,17 +375,31 @@ final class ColinHavenHome extends View {
             go(getContext(), 8);   // Marco's app grid
             return;
         }
+        // Fade the room to black around the pulled-out book, then open: the 4K picture has to give the
+        // decoder to the app, and this way that moment is black, not a flash of black squiggles.
+        if (leavingAt == 0) {
+            leavingAt = SystemClock.uptimeMillis();
+            invalidate();
+            postDelayed(() -> launch(b), LEAVE_MS);
+        }
+    }
+
+    private void launch(Book b) {
         Context c = getContext();
         PackageManager pm = c.getPackageManager();
         Intent i = pm.getLeanbackLaunchIntentForPackage(b.pkg);
         if (i == null) i = pm.getLaunchIntentForPackage(b.pkg);
         if (i == null) {
+            leavingAt = 0;
+            invalidate();
             Toast.makeText(c, b.label + ": app not installed", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
             c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (ActivityNotFoundException | SecurityException e) {
+            leavingAt = 0;
+            invalidate();
             Toast.makeText(c, b.label + ": can't open", Toast.LENGTH_SHORT).show();
         }
     }
@@ -411,16 +432,20 @@ final class ColinHavenHome extends View {
 
         // 1080p picture: fully drawn until the 4K frame is up, then a soft fade (the 4K clip shows through).
         float pic = videoOn ? 1f - Math.min(1f, (now - videoOnAt) / (float) FADE_4K_MS) : 1f;
+        boolean clip = videoPage == page && videoPage != 0;   // a 4K clip is (being) shown: cover with black, not 1080p
         boolean fading = videoOn && pic > 0f;
         img.setAlpha(255);
         r.set(0, 0, w, h);
         if (page != 1) {
-            drawPage(c, w, h, pic);
+            drawPage(c, w, h, pic, clip);
         } else {
             if (pic > 0f) {
-                img.setAlpha((int) (255 * pic));
-                c.drawBitmap(master, null, r, img);
-                img.setAlpha(255);
+                if (clip) c.drawColor(((int) (255 * pic) << 24));
+                else {   // no 4K clip on the TV: the 1080p picture (fallback only)
+                    img.setAlpha((int) (255 * pic));
+                    c.drawBitmap(master, null, r, img);
+                    img.setAlpha(255);
+                }
             }
             // Shelf: the previous selection fading out under the new one fading in (both identical to the
             // master outside their own book, so the crossfade only moves the books).
@@ -436,6 +461,16 @@ final class ColinHavenHome extends View {
             }
             img.setAlpha(255);
             fading |= t < 1f;
+        }
+        if (leavingAt != 0) {   // opening a book: the room fades to black, the pulled-out book stays lit
+            float lv = Math.min(1f, (now - leavingAt) / (float) LEAVE_MS);
+            c.drawColor(((int) (255 * lv) << 24));
+            if (sel >= 0 && shelf[sel] != null) {
+                r.set(w * SX, h * SY, w * (SX + SW), h * (SY + SH));
+                img.setAlpha(255);
+                c.drawBitmap(shelf[sel], null, r, img);
+            }
+            fading |= lv < 1f;
         }
         drawBar(c, w, h);
 
@@ -522,18 +557,21 @@ final class ColinHavenHome extends View {
     private int wsArtFor;
 
     /** Family workspaces 2-5: the page's landscape (1080p until its 4K clip is up), the number and a note. */
-    private void drawPage(Canvas c, int w, int h, float pic) {
-        if (wsArtFor != page) {
+    private void drawPage(Canvas c, int w, int h, float pic, boolean clip) {
+        if (!clip && wsArtFor != page) {   // only decode the 1080p fallback when there is no 4K clip
             if (wsArt != null) wsArt.recycle();
             wsArt = load(getContext(), "holmes/ws" + page + ".webp");
             wsArtFor = page;
         }
         Bitmap bg = wsArt != null ? wsArt : pageBg;
         if (pic > 0f) {
-            img.setAlpha((int) (255 * pic));
-            if (bg != null) c.drawBitmap(bg, null, r, img);
-            else c.drawColor(0xFF0B1B3B);
-            img.setAlpha(255);
+            if (clip) c.drawColor(((int) (255 * pic) << 24));
+            else {   // no 4K clip on the TV: the 1080p picture (fallback only)
+                img.setAlpha((int) (255 * pic));
+                if (bg != null) c.drawBitmap(bg, null, r, img);
+                else c.drawColor(0xFF0B1B3B);
+                img.setAlpha(255);
+            }
         }
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(CREAM);

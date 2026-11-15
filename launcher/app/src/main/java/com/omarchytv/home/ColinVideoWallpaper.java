@@ -29,6 +29,7 @@ final class ColinVideoWallpaper {
 
     private SurfaceView view;
     private MediaPlayer player;
+    private SurfaceHolder holder;
     private String path;
     private int resumeAt;
 
@@ -83,46 +84,81 @@ final class ColinVideoWallpaper {
         sv.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override public void surfaceCreated(SurfaceHolder h) {
                 if (view != sv) return;
-                try {
-                    MediaPlayer mp = new MediaPlayer();
-                    player = mp;
-                    mp.setDisplay(h);
-                    mp.setDataSource(p);
-                    mp.setVolume(0f, 0f);
-                    mp.setLooping(true);
-                    mp.setScreenOnWhilePlaying(false);
-                    mp.setOnVideoSizeChangedListener((m, w, hh) -> {
-                        // Full-size buffer so the hardware scaler, not the GPU, fits it to the panel.
-                        if (w > 0 && hh > 0 && view == sv) h.setFixedSize(w, hh);
-                    });
-                    mp.setOnInfoListener((m, what, extra) -> {
-                        if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START && onFrame != null && view == sv) sv.post(onFrame);
-                        return false;
-                    });
-                    mp.setOnPreparedListener(m -> {
-                        if (resumeAt > 0 && resumeAt < m.getDuration()) m.seekTo(resumeAt);
-                        m.start();
-                        Log.i(TAG, "playing " + p + " " + m.getVideoWidth() + "x" + m.getVideoHeight());
-                        // Some players (this MediaTek one) never send VIDEO_RENDERING_START: assume the frame is up shortly after start.
-                        if (onFrame != null) sv.postDelayed(() -> { if (view == sv && player == m) onFrame.run(); }, 450);
-                    });
-                    mp.setOnErrorListener((m, what, extra) -> {
-                        Log.w(TAG, "failed " + p + " what=" + what + " extra=" + extra + "; skipping it");
-                        broken.add(k);
-                        if (view == sv) stop((ViewGroup) sv.getParent());
-                        return true;
-                    });
-                    mp.prepareAsync();
-                } catch (Throwable t) {
-                    Log.w(TAG, "failed " + p, t);
+                holder = h;
+                MediaPlayer mp = new MediaPlayer();
+                player = mp;
+                if (!load(mp, sv, h, p, k, onFrame)) {
                     broken.add(k);
                     if (view == sv) stop((ViewGroup) sv.getParent());
                 }
             }
             @Override public void surfaceChanged(SurfaceHolder h, int fmt, int w, int hh) {}
-            @Override public void surfaceDestroyed(SurfaceHolder h) { release(); }
+            @Override public void surfaceDestroyed(SurfaceHolder h) {
+                holder = null;
+                release();
+            }
         });
         return true;
+    }
+
+    /**
+     * Swap to another clip on the same surface and player (no teardown): the old picture stays on the video plane
+     * until the new one's first frame replaces it, so there is no black or 1080p step in between.
+     * False if nothing is playing yet (then use {@link #startFile}).
+     */
+    boolean switchTo(File f, Runnable onFrame) {
+        if (!usable(f) || view == null || player == null || holder == null) return false;
+        if (f.getAbsolutePath().equals(path)) {
+            if (onFrame != null) view.post(onFrame);
+            return true;
+        }
+        path = f.getAbsolutePath();
+        resumeAt = 0;
+        MediaPlayer mp = player;
+        try {
+            mp.reset();
+        } catch (Throwable t) {
+            return false;
+        }
+        return load(mp, view, holder, path, key(f), onFrame);
+    }
+
+    /** Point the player at clip p on this surface, looping and muted; onFrame once its picture is up. */
+    private boolean load(MediaPlayer mp, SurfaceView sv, SurfaceHolder h, String p, String k, Runnable onFrame) {
+        try {
+            mp.setDisplay(h);
+            mp.setDataSource(p);
+            mp.setVolume(0f, 0f);
+            mp.setLooping(true);
+            mp.setScreenOnWhilePlaying(false);
+            mp.setOnVideoSizeChangedListener((m, w, hh) -> {
+                // Full-size buffer so the hardware scaler, not the GPU, fits it to the panel.
+                if (w > 0 && hh > 0 && view == sv) h.setFixedSize(w, hh);
+            });
+            mp.setOnInfoListener((m, what, extra) -> {
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START && onFrame != null && view == sv && p.equals(path)) sv.post(onFrame);
+                return false;
+            });
+            mp.setOnPreparedListener(m -> {
+                if (!p.equals(path) || player != m) return;
+                if (resumeAt > 0 && resumeAt < m.getDuration()) m.seekTo(resumeAt);
+                m.start();
+                Log.i(TAG, "playing " + p + " " + m.getVideoWidth() + "x" + m.getVideoHeight());
+                // Some players (this MediaTek one) never send VIDEO_RENDERING_START: assume the frame is up shortly after start.
+                if (onFrame != null) sv.postDelayed(() -> { if (view == sv && player == m && p.equals(path)) onFrame.run(); }, 450);
+            });
+            mp.setOnErrorListener((m, what, extra) -> {
+                Log.w(TAG, "failed " + p + " what=" + what + " extra=" + extra + "; skipping it");
+                broken.add(k);
+                if (view == sv) stop((ViewGroup) sv.getParent());
+                return true;
+            });
+            mp.prepareAsync();
+            return true;
+        } catch (Throwable t) {
+            Log.w(TAG, "failed " + p, t);
+            return false;
+        }
     }
 
     boolean playing() { return view != null; }
