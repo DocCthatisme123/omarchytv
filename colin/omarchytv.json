@@ -55,5 +55,6 @@
   "random_wallpaper": true,
   "omafireSound": true,
   "webapps": [],
-  "voiceKey": "launcher"
+  "voiceKey": "launcher",
+  "bootScreen": "wake"
 }
