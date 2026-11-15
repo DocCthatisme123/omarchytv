@@ -32,13 +32,16 @@ final class ColinVideoWallpaper {
     private String path;
     private int resumeAt;
 
+    /** A replaced clip at the same path gets a fresh chance. */
+    private static String key(File f) { return f.getAbsolutePath() + ":" + f.length() + ":" + f.lastModified(); }
+
     /** Clip for this theme, or null. */
     static File clipFor(Context c, String theme) {
         File dir = c.getExternalFilesDir("video");
         if (dir == null) return null;
         for (String n : new String[]{theme + ".mp4", "default.mp4"}) {
             File f = new File(dir, n);
-            if (f.isFile() && f.length() > 0 && !broken.contains(f.getAbsolutePath())) return f;
+            if (f.isFile() && f.length() > 0 && !broken.contains(key(f))) return f;
         }
         return null;
     }
@@ -54,7 +57,7 @@ final class ColinVideoWallpaper {
         stop(root);
         if (!f.getAbsolutePath().equals(path)) resumeAt = 0;
         path = f.getAbsolutePath();
-        final String p = path;
+        final String p = path, k = key(f);
         SurfaceView sv = new SurfaceView(c);
         sv.setFocusable(false);
         sv.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -83,14 +86,14 @@ final class ColinVideoWallpaper {
                     });
                     mp.setOnErrorListener((m, what, extra) -> {
                         Log.w(TAG, "failed " + p + " what=" + what + " extra=" + extra + "; skipping it");
-                        broken.add(p);
+                        broken.add(k);
                         if (view == sv) stop((ViewGroup) sv.getParent());
                         return true;
                     });
                     mp.prepareAsync();
                 } catch (Throwable t) {
                     Log.w(TAG, "failed " + p, t);
-                    broken.add(p);
+                    broken.add(k);
                     if (view == sv) stop((ViewGroup) sv.getParent());
                 }
             }
