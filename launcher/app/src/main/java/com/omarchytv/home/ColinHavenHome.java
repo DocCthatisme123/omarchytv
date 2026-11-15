@@ -37,40 +37,43 @@ import java.util.Locale;
  */
 final class ColinHavenHome extends View {
 
-    /** One book: label, spine art, icon, text colour on the spine, and what it opens. */
+    /** One book: label, cover colour, icon, text colour on the cover, and what it opens. */
     private static final class Book {
-        final String label, spine, icon, pkg;
-        final int ink;
-        Bitmap spineBmp, iconBmp;
+        final String label, icon, pkg;
+        final int color, ink;
+        Bitmap iconBmp;
 
-        Book(String label, String spine, String icon, int ink, String pkg) {
+        Book(String label, int color, String icon, int ink, String pkg) {
             this.label = label;
-            this.spine = spine;
+            this.color = color;
             this.icon = icon;
             this.ink = ink;
             this.pkg = pkg;
         }
     }
 
-    private static final int NIGHT_SKY = 0xFF0B1B3B, CREAM = 0xFFFFF6E6, GOLD = 0xFFFFC94D;
+    private static final int NIGHT_SKY = 0xFF0B1B3B, CREAM = 0xFFFFF6E6, GOLD = 0xFFFFC94D, INK_DARK = 0xFF111827;
     /** Opens the stock OmarchyTV home (all apps, settings, widgets). */
     private static final String STOCK = "@stock";
 
     private static final Book[] BOOKS = {
-            new Book("Storybooks", "spine1", "book", NIGHT_SKY, "com.netflix.ninja"),
-            new Book("Learning", "spine2", "cap", Color.WHITE, "com.google.android.youtube.tv"),
-            new Book("Music", "spine3", "piano", Color.WHITE, "com.google.android.youtube.tvmusic"),
-            new Book("Discovery", "spine4", "compass", Color.WHITE, "com.amazon.amazonvideo.livingroom"),
-            new Book("Family", "spine5", "family", NIGHT_SKY, "com.smartdevice.livetv"),
-            new Book("Technology", "spine6", "laptop", Color.WHITE, STOCK),
+            new Book("Storybooks", 0xFFF4F4F8, "book", INK_DARK, "com.netflix.ninja"),
+            new Book("Learning", 0xFF22C55E, "cap", Color.WHITE, "com.google.android.youtube.tv"),
+            new Book("Music", 0xFFE8202A, "piano", Color.WHITE, "com.google.android.youtube.tvmusic"),
+            new Book("Discovery", 0xFF1E5BFF, "compass", Color.WHITE, "com.amazon.amazonvideo.livingroom"),
+            new Book("Family", 0xFFFFD21F, "family", INK_DARK, "com.smartdevice.livetv"),
+            new Book("Technology", 0xFF9B30FF, "laptop", Color.WHITE, STOCK),
     };
 
     private static ColinHavenHome view;
 
-    private final Bitmap dayBg, nightBg, selGlow;
+    private final Bitmap dayBg, nightBg;
+    private final Paint shape = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final android.graphics.Path clip = new android.graphics.Path();
     private final Paint img = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint small = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
     private int sel;
     /** Selected book's slide-out, animated 0..1 per book. */
@@ -79,18 +82,19 @@ final class ColinHavenHome extends View {
     private boolean hidden;
     private String lastClock = "";
 
-    private ColinHavenHome(Context c, Bitmap day, Bitmap night, Bitmap glow) {
+    private ColinHavenHome(Context c, Bitmap day, Bitmap night) {
         super(c);
         dayBg = day;
         nightBg = night;
-        selGlow = glow;
         for (Book b : BOOKS) {
-            b.spineBmp = load(c, "holmes/" + b.spine + ".webp");
             b.iconBmp = load(c, "holmes/icon_" + b.icon + ".webp");
         }
         Typeface serif = Typeface.create(Typeface.SERIF, Typeface.BOLD);
+        Typeface heavy = android.os.Build.VERSION.SDK_INT >= 28 ? Typeface.create(Typeface.SANS_SERIF, 800, false)
+                : Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
         text.setTypeface(serif);
         small.setTypeface(serif);
+        label.setTypeface(heavy);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -104,7 +108,7 @@ final class ColinHavenHome extends View {
         Bitmap day = load(a, "holmes/home_bg.webp");
         if (day == null) return;
         Bitmap night = load(a, "holmes/night_bg.webp");
-        ColinHavenHome v = new ColinHavenHome(a, day, night != null ? night : day, load(a, "holmes/spine_sel.webp"));
+        ColinHavenHome v = new ColinHavenHome(a, day, night != null ? night : day);
         root.addView(v, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         v.bringToFront();
@@ -214,9 +218,8 @@ final class ColinHavenHome extends View {
         img.setAlpha(255);
         c.drawBitmap(night() ? nightBg : dayBg, null, r, img);
 
-        // Books: stacked in the shelf alcove. The spine art has a wide soft glow, so the images overlap
-        // (step < height) and the visible books sit snugly, as in the concept render.
-        float shelfX = w * 0.052f, shelfW = w * 0.225f, top = h * 0.205f, stepY = h * 0.10f, bookH = h * 0.17f;
+        // Books: thick hardcovers lying flat, stacked tight and filling the shelf alcove, as in the concept.
+        float shelfX = w * 0.058f, shelfW = w * 0.215f, top = h * 0.235f, stepY = h * 0.10f, bookH = stepY - 2f;
         boolean animating = false;
         for (int i = 0; i < BOOKS.length; i++) {
             float target = i == sel ? 1f : 0f;
@@ -260,40 +263,95 @@ final class ColinHavenHome extends View {
 
     private void drawBook(Canvas c, int i, float x, float y, float bw, float bh, long now) {
         Book b = BOOKS[i];
+        boolean isSel = i == sel;
         float o = out[i], ease = 1f - (1f - o) * (1f - o);
-        float scale = 1f + 0.08f * ease, slide = bw * 0.10f * ease;
-        float cw = bw * scale, ch = bh * scale, cx = x + slide - (cw - bw) * 0.25f, cy = y - (ch - bh) / 2f;
+        float scale = 1f + 0.07f * ease;
+        float w = bw * scale, h = bh * scale, x0 = x + bw * 0.07f * ease - (w - bw) * 0.3f, y0 = y - (h - bh) / 2f;
+        float rad = h * 0.30f;
+        int color = b.color;
 
-        if (i == sel && selGlow != null) {   // gold glow behind/around the selected book, gently pulsing
-            float pulse = 0.75f + 0.25f * (float) Math.sin(now / 420.0);
-            float gx = cw * 0.03f, gy = ch * 0.05f;
-            r.set(cx - gx, cy - gy, cx + cw + gx, cy + ch + gy);
-            img.setColorFilter(null);
-            img.setAlpha((int) (255 * ease * pulse));
-            c.drawBitmap(selGlow, null, r, img);
+        // Neon glow around the cover (stronger, pulsing, when selected).
+        float pulse = isSel ? 0.8f + 0.2f * (float) Math.sin(now / 420.0) : 1f;
+        shape.setShader(null);
+        shape.setStyle(Paint.Style.FILL);
+        shape.setColor(color);
+        shape.setShadowLayer(h * (isSel ? 0.5f * pulse : 0.22f), 0, 0, color);
+        r.set(x0, y0, x0 + w, y0 + h);
+        c.drawRoundRect(r, rad, rad, shape);
+        shape.clearShadowLayer();
+
+        // Padded hardcover shading: light top band, full colour, deep bottom.
+        shape.setShader(new android.graphics.LinearGradient(0, y0, 0, y0 + h,
+                new int[]{mix(color, 0.18f, false), mix(color, 0.40f, true), color, mix(color, 0.12f, false), mix(color, 0.55f, false)},
+                new float[]{0f, 0.12f, 0.30f, 0.75f, 1f}, android.graphics.Shader.TileMode.CLAMP));
+        c.drawRoundRect(r, rad, rad, shape);
+        shape.setShader(null);
+
+        c.save();
+        clip.reset();
+        clip.addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW);
+        c.clipPath(clip);
+        // Left end: cream page block (curved), with faint page lines, then two gold bands following the curve.
+        float ew = h * 0.62f, cx = x0 + ew * 0.42f, cy = y0 + h / 2f;
+        shape.setShader(new android.graphics.LinearGradient(0, y0, 0, y0 + h, new int[]{0xFFD9CFB8, CREAM, 0xFFBFB39A}, null,
+                android.graphics.Shader.TileMode.CLAMP));
+        r.set(cx - ew * 0.42f, cy - h * 0.46f, cx + ew * 0.42f, cy + h * 0.46f);
+        c.drawOval(r, shape);
+        shape.setShader(null);
+        shape.setStyle(Paint.Style.STROKE);
+        shape.setStrokeWidth(1f);
+        shape.setColor(0x59786446);
+        for (int k = 1; k < 6; k++) {
+            float rx = ew * 0.42f * (1f - k * 0.12f);
+            r.set(cx - rx, cy - h * 0.46f, cx + rx, cy + h * 0.46f);
+            c.drawArc(r, 90, 180, false, shape);
         }
-        if (b.spineBmp != null) {
-            r.set(cx, cy, cx + cw, cy + ch);
-            img.setColorFilter(null);
-            img.setAlpha(i == sel ? 255 : 225);
-            c.drawBitmap(b.spineBmp, null, r, img);
+        shape.setColor(0xE6FFC94D);
+        shape.setStrokeWidth(Math.max(2f, h * 0.035f));
+        for (float f : new float[]{0.72f, 0.86f}) {
+            float bx = x0 + ew * f;
+            r.set(bx - ew * 0.18f, y0 + h * 0.02f, bx + ew * 0.18f, y0 + h * 0.98f);
+            c.drawArc(r, -90, 180, false, shape);
         }
-        // Icon then label, past the page-edge cap on the left of the spine.
-        float ix = cx + cw * 0.14f, isz = ch * 0.32f, iy = cy + (ch - isz) / 2f;
+        shape.setStyle(Paint.Style.FILL);
+        // Soft sheen across the top third.
+        shape.setShader(new android.graphics.LinearGradient(0, y0 + h * 0.08f, 0, y0 + h * 0.42f, 0x59FFFFFF, 0x00FFFFFF,
+                android.graphics.Shader.TileMode.CLAMP));
+        c.drawRect(x0 + ew, y0 + h * 0.08f, x0 + w - h * 0.2f, y0 + h * 0.42f, shape);
+        shape.setShader(null);
+        c.restore();
+
+        // Rim: gold when selected.
+        shape.setStyle(Paint.Style.STROKE);
+        shape.setStrokeWidth(isSel ? 5f : 2f);
+        shape.setColor(isSel ? 0xFFFFE9A8 : 0x8CFFFFFF);
+        r.set(x0 + 1, y0 + 1, x0 + w - 1, y0 + h - 1);
+        c.drawRoundRect(r, rad, rad, shape);
+        shape.setStyle(Paint.Style.FILL);
+
+        // Big icon and bold label, centred on the cover right of the page end.
+        float isz = h * 0.56f, gapI = h * 0.20f;
+        label.setTextSize(h * 0.40f);
+        float maxText = w - ew - isz - gapI - h * 0.4f;
+        if (label.measureText(b.label) > maxText) label.setTextSize(label.getTextSize() * maxText / label.measureText(b.label));
+        float tw = label.measureText(b.label), ax = x0 + ew + (w - ew - (isz + gapI + tw)) / 2f;
         if (b.iconBmp != null) {
-            r.set(ix, iy, ix + isz, iy + isz);
+            r.set(ax, cy - isz / 2f, ax + isz, cy + isz / 2f);
             img.setColorFilter(new PorterDuffColorFilter(b.ink, PorterDuff.Mode.SRC_IN));
             img.setAlpha(255);
             c.drawBitmap(b.iconBmp, null, r, img);
             img.setColorFilter(null);
         }
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(ch * 0.22f);
-        text.setColor(b.ink);
-        text.setShadowLayer(ch * 0.04f, 0, 0, b.ink == Color.WHITE ? 0x99000000 : 0x55FFFFFF);
-        float maxW = cw * 0.62f;
-        if (text.measureText(b.label) > maxW) text.setTextSize(text.getTextSize() * maxW / text.measureText(b.label));
-        Paint.FontMetrics fm = text.getFontMetrics();
-        c.drawText(b.label, ix + isz + cw * 0.035f, cy + ch / 2f - (fm.ascent + fm.descent) / 2f, text);
+        label.setColor(b.ink);
+        label.setShadowLayer(h * 0.05f, 0, 0, b.ink == Color.WHITE ? 0x80000000 : 0x73FFFFFF);
+        Paint.FontMetrics fm = label.getFontMetrics();
+        c.drawText(b.label, ax + isz + gapI, cy - (fm.ascent + fm.descent) / 2f, label);
+    }
+
+    /** Blend a colour toward white (light) or black. */
+    private static int mix(int color, float t, boolean light) {
+        int k = light ? 255 : 0;
+        int r = Color.red(color), g = Color.green(color), b = Color.blue(color);
+        return Color.rgb(Math.round(r + (k - r) * t), Math.round(g + (k - g) * t), Math.round(b + (k - b) * t));
     }
 }
