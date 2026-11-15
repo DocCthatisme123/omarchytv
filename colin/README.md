@@ -15,3 +15,8 @@ Built, signed and installed by Nook on the NUC. The build and deploy scripts are
 on the NUC, and the weekly run is Sunday at 03:30. The signing key is kept on the NUC and never committed.
 
 All credit for OmarchyTV to Marco Porro (MIT); see ../LICENSE.
+
+## 4K video wallpaper (ColinVideoWallpaper.java)
+Loops a muted clip on a SurfaceView (hardware video plane) behind the home screen. Put clips in
+`/sdcard/Android/data/com.omarchytv.home/files/video/` as `<theme>.mp4` (e.g. `cumulus.mp4`) or `default.mp4`.
+No clip = stock behaviour. Bad clip = skipped, still wallpaper shows. Log: `adb logcat -s OmarchyVideo`.

@@ -3040,7 +3040,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     private android.media.MediaPlayer introPlayer;
     private String lastIntroKey;
 
+    private final ColinVideoWallpaper colinVideo = new ColinVideoWallpaper();   // Colin's fork: 4K video wallpaper
+
     private void stopWallpaperIntro() {
+        colinVideo.stop(root);   // Colin's fork
         if (introPlayer != null) {
             try { introPlayer.stop(); } catch (Throwable ignored) {}
             try { introPlayer.release(); } catch (Throwable ignored) {}
@@ -3055,6 +3058,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     }
 
     private void playWallpaperIntro(LauncherConfig cfg) {
+        if (root != null && colinVideo.start(this, root, Theme.cur().name)) return;   // Colin's fork: own clip wins
         if (!cfg.wallpaperIntro || root == null) {
             stopWallpaperIntro();
             return;
