@@ -127,10 +127,12 @@ final class BootScreenView extends View {
             screenOn = null;
         }
         if (showing != null) showing.finish();
+        ColinHavenBoot.finishAll();   // Colin's fork
     }
 
     /** From the top of MainActivity.dispatchKeyEvent: while it plays, any key skips and no key reaches Home. */
     static boolean consumeKey(KeyEvent e) {
+        if (ColinHavenBoot.consumeKey(e)) return true;   // Colin's fork
         BootScreenView v = showing;
         if (v == null) return false;
         if (e.getAction() == KeyEvent.ACTION_DOWN) v.fade();
@@ -138,11 +140,12 @@ final class BootScreenView extends View {
     }
 
     static boolean isShowing() {
-        return showing != null;
+        return showing != null || ColinHavenBoot.isShowing();   // Colin's fork
     }
 
     private static void show(Activity a, FrameLayout root) {
         if (showing != null || root == null) return;
+        if (ColinHavenBoot.show(a, root)) return;   // Colin's fork: Holmes Haven boot screen
         LauncherConfig cfg = LauncherConfig.get(a);
         String version = "";
         try {
