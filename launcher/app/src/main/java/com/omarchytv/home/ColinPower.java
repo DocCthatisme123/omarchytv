@@ -126,15 +126,28 @@ final class ColinPower extends View {
                 break;
             case 1:
                 doing = "Restarting…";
-                ColinRemote.shellSoon("svc power reboot || reboot");
+                // svc may not return an error code when Android refuses it, so the fallback follows regardless.
+                ColinRemote.shellSoon("svc power reboot; sleep 2; reboot");
+                giveUpLater();
                 break;
             case 2:
                 doing = "Turning off…";
-                ColinRemote.shellSoon("svc power shutdown || reboot -p");
+                ColinRemote.shellSoon("svc power shutdown; sleep 2; reboot -p");
+                giveUpLater();
                 break;
             default:
                 close();
         }
+    }
+
+    /** Still here after 15 s: the TV refused. Say so, then close. */
+    private void giveUpLater() {
+        postDelayed(() -> {
+            if (showing != this) return;
+            doing = "The TV wouldn’t allow it. Use the TV’s own remote";
+            invalidate();
+            postDelayed(ColinPower::close, 5000);
+        }, 15_000);
     }
 
     @Override
