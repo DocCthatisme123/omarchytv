@@ -159,22 +159,7 @@ final class ColinRemote {
         Context c = app;
         if (c == null) throw new IllegalStateException("not started");
         state = "starting";
-        android.content.SharedPreferences prefs = c.getSharedPreferences("haven_remote", Context.MODE_PRIVATE);
-        // First time: say on the TV, before Android's prompt, that it's ours (Colin only taps Allow when we asked).
-        if (!prefs.getBoolean("allowed", false)) explain(c, "Holmes Haven Remote: the TV will now ask \u201cAllow USB debugging?\u201d. "
-                + "That's your phone remote. Tick \u201cAlways allow\u201d, then OK.");
-        try {
-            adb = LocalAdb.connect(c, 60_000, () -> {
-                state = "needs_allow";
-                explain(c, "Holmes Haven Remote: tick \u201cAlways allow\u201d, then OK");
-            });
-            prefs.edit().putBoolean("allowed", true).apply();
-        } catch (java.io.IOException e) {
-            String m = String.valueOf(e.getMessage());
-            state = m.contains("port 5555") ? "adb_off" : m.contains("accepted") || m.contains("rejected") ? "needs_allow" : "off";
-            adb = null;
-            throw e;
-        }
+        adb = connectWaitingForAllow(c);
         try {
             String eth = adb.shell("dumpsys ethernet");
             Matcher m = Pattern.compile("hwAddress: ([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})").matcher(eth);
@@ -189,6 +174,64 @@ final class ColinRemote {
             drop();
             throw e;
         }
+    }
+
+    /**
+     * Known key: straight in. Unknown: one connection offers the key (the TV's prompt) and waits in the background,
+     * while a quiet connection that never offers the key retries every 2 s; Android 10 doesn't always tell the
+     * waiting connection about "Always allow", but the key is trusted from the moment it's tapped (Nook, 12:02).
+     */
+    private static LocalAdb connectWaitingForAllow(Context c) throws Exception {
+        try {
+            return LocalAdb.connectKnown(c);
+        } catch (java.io.IOException e) {
+            if (String.valueOf(e.getMessage()).contains("port 5555")) {
+                state = "adb_off";
+                throw e;
+            }
+        }
+        // Say on the TV, before Android's prompt, that it's ours (Colin only taps Allow when one of us asked).
+        explain(c, "Holmes Haven Remote: the TV will now ask \u201cAllow USB debugging?\u201d. "
+                + "That's your phone remote. Tick \u201cAlways allow\u201d, then OK.");
+        final LocalAdb[] prompted = new LocalAdb[1];
+        final boolean[] done = new boolean[1];
+        Thread asker = new Thread(() -> {
+            try {
+                LocalAdb a = LocalAdb.connect(c, 120_000, () -> state = "needs_allow");
+                synchronized (prompted) {
+                    if (done[0]) a.close();   // the quiet connection got in first
+                    else prompted[0] = a;
+                }
+            } catch (Exception ignored) {
+            }
+        }, "haven-remote-allow");
+        asker.setDaemon(true);
+        asker.start();
+        long until = android.os.SystemClock.uptimeMillis() + 120_000;
+        while (android.os.SystemClock.uptimeMillis() < until) {
+            Thread.sleep(2000);
+            synchronized (prompted) {
+                if (prompted[0] != null) {
+                    done[0] = true;
+                    return prompted[0];
+                }
+            }
+            try {
+                LocalAdb a = LocalAdb.connectKnown(c);
+                synchronized (prompted) {
+                    done[0] = true;
+                    if (prompted[0] != null) prompted[0].close();
+                }
+                return a;
+            } catch (java.io.IOException ignored) {
+            }
+        }
+        synchronized (prompted) {
+            done[0] = true;
+            if (prompted[0] != null) return prompted[0];
+        }
+        state = "needs_allow";
+        throw new java.io.IOException("Allow wasn't tapped on the TV");
     }
 
     /** A long toast on the TV, on the UI thread. */

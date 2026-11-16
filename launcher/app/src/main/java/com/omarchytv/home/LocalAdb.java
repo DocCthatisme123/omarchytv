@@ -68,6 +68,18 @@ final class LocalAdb implements Closeable {
 
     /** Connects and authenticates. If the TV doesn't know our key yet, waits up to `approvalMs` for you to accept. */
     static LocalAdb connect(Context c, int approvalMs, Approval approval) throws IOException {
+        return connect(c, approvalMs, approval, true);
+    }
+
+    /**
+     * Colin's fork: connect only if the TV already trusts our key; never offers it, so it can't show the prompt.
+     * Used to notice "Always allow" quickly (a pending connection isn't always told).
+     */
+    static LocalAdb connectKnown(Context c) throws IOException {
+        return connect(c, 3000, null, false);
+    }
+
+    private static LocalAdb connect(Context c, int approvalMs, Approval approval, boolean offer) throws IOException {
         KeyPair keys = keys(c);
         Socket s = new Socket();
         try {
@@ -97,6 +109,8 @@ final class LocalAdb implements Closeable {
                 if (!signed) {
                     adb.send(AUTH, AUTH_SIGNATURE, 0, sign(keys.getPrivate(), m.data));
                     signed = true;
+                } else if (!offer) {
+                    throw new IOException("key not trusted yet");
                 } else if (!offeredKey) {
                     // Unknown key: send the public one; the TV shows "Allow USB debugging?".
                     adb.send(AUTH, AUTH_RSAPUBLICKEY, 0, publicKeyBlob(keys.getPublic()));

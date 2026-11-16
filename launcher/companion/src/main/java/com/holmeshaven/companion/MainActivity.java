@@ -555,11 +555,22 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject o = new Link(t.host, t.pcId, t.token).postJson("/v1/haven/warm", null);
                 String rs = o.optString("remote", "");
-                if ("needs_allow".equals(rs) || "adb_off".equals(rs)) main.post(() -> remoteHint(rs));
+                main.post(() -> {
+                    if ("ready".equals(rs)) {
+                        warmChecks = 0;
+                        if (waitingForRemote) remoteHint("");
+                        waitingForRemote = false;
+                    } else if ("needs_allow".equals(rs) || "adb_off".equals(rs)) remoteHint(rs);
+                    // Not ready yet (connecting, or the TV's Allow prompt is up): look again shortly, for up to 2 min.
+                    if (!"ready".equals(rs) && !"adb_off".equals(rs) && onHome && warmChecks++ < 40) main.postDelayed(this::warm, 3000);
+                });
             } catch (Exception ignored) {
             }
         });
     }
+
+    private int warmChecks;
+    private boolean waitingForRemote;
 
     private void remoteHint(String code) {
         if (remoteLine == null) return;
@@ -567,12 +578,17 @@ public final class MainActivity extends Activity {
         switch (code) {
             case "": s = ""; break;
             case "needs_allow": s = "On the TV: tick “Always allow”, then Allow (only once)"; break;
-            case "remote_starting": s = "Getting the remote ready… press again in a moment"; break;
+            case "remote_starting": s = "Getting the remote ready…"; break;
             case "adb_off": s = "The TV's debugging is off, so the remote can't press keys"; break;
             case "unreachable": s = "Can't reach the TV. If it's off, tap ⏻ to wake it"; break;
             default: s = "The TV said: " + code;
         }
         remoteLine.setText(s);
+        if (("needs_allow".equals(code) || "remote_starting".equals(code)) && !waitingForRemote) {
+            waitingForRemote = true;   // keep checking; the line clears once the remote is ready
+            warmChecks = 0;
+            main.postDelayed(this::warm, 2000);
+        }
     }
 
     /** Power tap: awake -> sleep, asleep -> wake, no answer -> Wake-on-LAN (works from a full shutdown too). */
