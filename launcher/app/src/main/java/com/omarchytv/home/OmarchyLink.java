@@ -173,6 +173,11 @@ public final class OmarchyLink implements LinkServer.Host {
         return r != null && r.live() && r.server.connected(pcId);
     }
 
+    /** Colin's fork: the launcher is in front (the phone's workspace buttons switch in place then). */
+    static boolean homeVisible() {
+        return homeVisible;
+    }
+
     static void setHomeVisible(boolean v) {
         homeVisible = v;
         statusChanged();

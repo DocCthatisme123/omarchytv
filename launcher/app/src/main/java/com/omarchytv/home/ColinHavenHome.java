@@ -147,20 +147,40 @@ final class ColinHavenHome extends View {
     }
 
     /** From MainActivity.onResume and onNewIntent (Home pressed): the bookshelf comes back, nothing selected. */
+    /** A workspace the phone asked for while another app was in front: opened by the next show(), not workspace 1. */
+    private static volatile int pendingPage;
+    private static volatile long pendingAt;
+
+    /** The phone's workspace buttons (UI thread): switch in place, like Left/Right, with no Home step in between. */
+    static void fromRemote(Context c, int n) {
+        if (n < 1 || n > 10 || view == null) return;
+        if (OmarchyLink.homeVisible()) {
+            go(c, n);
+            return;
+        }
+        pendingPage = n;
+        pendingAt = SystemClock.uptimeMillis();
+        c.startActivity(new android.content.Intent(c, MainActivity.class)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+    }
+
     static void show() {
         ColinHavenHome v = view;
         if (v == null) return;
+        // onNewIntent and onResume both call show(): keep the phone's request for both, then let it go.
+        int want = SystemClock.uptimeMillis() - pendingAt < 2000 ? pendingPage : 0;
         v.hidden = false;
         v.setVisibility(VISIBLE);
         v.animate().cancel();
         v.setAlpha(1f);
         v.setTranslationX(0f);
         v.prev = v.sel = -1;
-        v.page = 1;
+        v.page = want >= 1 && want <= 5 ? want : 1;
         v.barFocus = -1;
         v.leavingAt = 0;
         v.syncVideo();
         v.invalidate();
+        if (want > 5) go(v.getContext(), want);   // one of Marco's workspaces (6-0)
     }
 
     /** From MainActivity.onPause: release the 4K decoder while Home isn't in front (show() restarts it). */

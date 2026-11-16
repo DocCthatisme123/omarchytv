@@ -83,6 +83,6 @@ launcher opens its own ADB (LocalAdb, 127.0.0.1:5555) and keeps Android's `hid -
 Always allow. Needs adb on 5555 to stay on (Colin, 2026-11-16: option 1; Google's remote service is the fallback).
 Routes (signed): `POST /v1/haven/key {key, hold}` (up/down/left/right/select/back/home/menu, media, volume, mute,
 channel_up/down, 0-9, power; hold=true on power = the shutdown prompt; "wakeup"/"sleep" press power only if needed),
-`POST /v1/haven/workspace {n}` (Home, 0.7 s, then the number), `POST /v1/haven/warm` (the app opened: connect now).
+`POST /v1/haven/workspace {n}` (switches in place in the launcher, like Left/Right; from another app it opens the launcher straight on that workspace), `POST /v1/haven/warm` (the app opened: connect now).
 `/v1/status` carries `remote` (off/starting/needs_allow/adb_off/ready) and `wakeMac` (from `dumpsys ethernet`, since
 apps can't read the MAC on Android 10); the phone keeps it and sends Wake-on-LAN when the TV doesn't answer.

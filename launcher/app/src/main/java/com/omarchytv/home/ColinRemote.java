@@ -102,13 +102,13 @@ final class ColinRemote {
         return send(press(KEYS.get("power"), 40));
     }
 
-    /** Workspace 1-10: Home, a moment for the home screen to come up, then the number (0 = 10). */
+    /** Workspace 1-10: switched directly in the launcher (no Home key, so no flash of workspace 1). */
     static JSONObject workspace(int n) {
         if (n < 1 || n > 10) return err("bad_workspace");
-        StringBuilder b = new StringBuilder(press(KEYS.get("home"), 40));
-        b.append("{\"id\":1,\"command\":\"delay\",\"duration\":700}\n");
-        b.append(press(KEYS.get(n == 10 ? "0" : String.valueOf(n)), 40));
-        return send(b.toString());
+        Context c = app;
+        if (c == null) return err("remote_starting");
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ColinHavenHome.fromRemote(c, n));
+        return ok();
     }
 
     private static String press(int[] k, int holdMs) {
