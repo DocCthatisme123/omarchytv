@@ -117,6 +117,7 @@ public final class OmarchyLink implements LinkServer.Host {
         if (runtime != null) return;
         OmarchyLink r = new OmarchyLink();
         r.app = app;
+        com.omarchytv.home.link.ColinCompanion.init(app);   // Colin's fork: phone app update file
         runtime = r;
         bg.execute(r::boot);
     }
@@ -732,7 +733,9 @@ public final class OmarchyLink implements LinkServer.Host {
                 fg = new JSONObject().put("package", pkg)
                         .put("label", pkg.equals(app.getPackageName()) ? "OmarchyTV" : label(pkg)).put("source", source);
             }
-            return new JSONObject().put("tvId", server.store().tvId()).put("name", tvName()).put("protocol", 1)
+            JSONObject st = new JSONObject();
+            com.omarchytv.home.link.ColinCompanion.statusExtras(st);   // Colin's fork: uptime, storage
+            return st.put("tvId", server.store().tvId()).put("name", tvName()).put("protocol", 1)
                     .put("launcherVersion", version())
                     .put("foreground", fg == null ? JSONObject.NULL : fg)
                     .put("homeVisible", homeVisible).put("screensaver", screensaver).put("screenOn", screenOn())

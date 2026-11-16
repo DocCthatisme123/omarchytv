@@ -933,6 +933,8 @@ public final class LinkServer {
 
     private Response route(Request req, Auth a, JSONObject body) throws Exception {
         String m = req.method, p = req.target;
+        Response colin = ColinCompanion.route(m, p);   // Colin's fork: Holmes Haven phone app (update-on-open)
+        if (colin != null) return colin;
         if ("GET".equals(m) && "/v1/status".equals(p)) return new Response(200, status());
         if ("POST".equals(m) && "/v1/cast".equals(p)) return cast(body);
         if ("PUT".equals(m) && "/v1/cast/file".equals(p)) return castFile(req);

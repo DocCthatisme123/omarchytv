@@ -98,6 +98,8 @@ final class ColinHavenHome extends View {
     private long leavingAt;
     /** Floating Omarchy bar: Marco's right-hand icons (same actions), -1 = not focused. */
     private int barFocus = -1;
+    /** barFocus value for the Holmes Haven logo in the bar: OK opens "Phones" (pair or forget a phone). */
+    private static final int BAR_LOGO = 99;
     private static final int[] BAR_ICONS = {R.drawable.ln_cinemarchy, R.drawable.ln_arcade, R.drawable.ln_wifi,
             R.drawable.ln_bt, R.drawable.ln_vol, R.drawable.ln_input, R.drawable.ln_monitor};
     private final android.graphics.drawable.Drawable[] barIcons = new android.graphics.drawable.Drawable[BAR_ICONS.length];
@@ -288,6 +290,7 @@ final class ColinHavenHome extends View {
 
     /** From MainActivity.dispatchKeyEvent (after the boot screen). True = handled here. */
     static boolean consumeKey(KeyEvent e) {
+        if (ColinPhones.consumeKey(e)) return true;   // "Phones" (pairing) is open over the room
         ColinHavenHome v = view;
         if (v == null || v.hidden) return false;
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
@@ -298,11 +301,11 @@ final class ColinHavenHome extends View {
 
         if (v.barFocus >= 0) {   // in the floating bar: Left/Right along the icons, OK runs Marco's action, Down leaves
             switch (kc) {
-                case KeyEvent.KEYCODE_DPAD_LEFT:
-                    if (down) v.barFocus = Math.max(0, v.barFocus - 1);
+                case KeyEvent.KEYCODE_DPAD_LEFT:   // past the first icon: the Holmes Haven logo (Phones)
+                    if (down) v.barFocus = v.barFocus == BAR_LOGO ? BAR_LOGO : v.barFocus == 0 ? BAR_LOGO : v.barFocus - 1;
                     break;
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
-                    if (down) v.barFocus = Math.min(BAR_ICONS.length - 1, v.barFocus + 1);
+                    if (down) v.barFocus = v.barFocus == BAR_LOGO ? 0 : Math.min(BAR_ICONS.length - 1, v.barFocus + 1);
                     break;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     if (down) v.barFocus = -1;
@@ -311,7 +314,10 @@ final class ColinHavenHome extends View {
                     break;
                 default:
                     if (ok) {
-                        if (press && barClick != null) barClick.accept(v.barFocus);
+                        if (press && v.barFocus == BAR_LOGO) {
+                            v.barFocus = -1;
+                            ColinPhones.open((Activity) v.getContext(), v.root);
+                        } else if (press && barClick != null) barClick.accept(v.barFocus);
                         break;
                     }
                     return false;
@@ -494,6 +500,13 @@ final class ColinHavenHome extends View {
      * Marco's tray icons on the right; on 2-5 also the workspace numbers on the left (this one bold, the rest faded)
      * after our emblem, where Omarchy has its logo. Workspace 1 stays clean: no numbers.
      */
+    /** The logo is focused in the bar: a gold Waybar-style underline under it (r = the logo's rect). */
+    private void logoFocus(Canvas c, int h) {
+        bar.setColor(GOLD_BAR);
+        float u = r.bottom - r.height() * 0.06f;
+        c.drawRect(r.left + r.width() * 0.08f, u, r.right - r.width() * 0.08f, u + Math.max(3f, h * 0.003f), bar);
+    }
+
     private void drawBar(Canvas c, int w, int h) {
         float bh = h * 0.048f, cy = bh * 0.55f + h * 0.008f;
         Date d = new Date();
@@ -515,6 +528,7 @@ final class ColinHavenHome extends View {
                 r.set(lx, ly, lx + lw, ly + lh);
                 img.setAlpha(255);
                 c.drawBitmap(logo, null, r, img);
+                if (barFocus == BAR_LOGO) logoFocus(c, h);
             }
             text.setTextAlign(Paint.Align.RIGHT);
             text.setTextSize(h * 0.075f);
@@ -533,6 +547,7 @@ final class ColinHavenHome extends View {
                 r.set(lx, ly, lx + lw, ly + lh);
                 img.setAlpha(255);
                 c.drawBitmap(logo, null, r, img);
+                if (barFocus == BAR_LOGO) logoFocus(c, h);
             }
             small.setTextAlign(Paint.Align.LEFT);
             small.setTextSize(h * 0.030f);

@@ -1,0 +1,35 @@
+// Colin's fork: Holmes Haven, the family's phone app for the TV (plan: ~/Nook/projects/companion/PLAN.md on the NUC).
+// Built with the launcher: ./gradlew assembleRelease also gives companion/build/outputs/apk/release/companion-release-unsigned.apk
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.holmeshaven.companion'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.holmeshaven.companion'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    lint {
+        // Sideloaded through Flux and the TV, never Play: skip the Play checks that would stop assembleRelease.
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

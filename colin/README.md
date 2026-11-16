@@ -57,3 +57,20 @@ inputs, PC screen), same actions via HomeV29.barClick(i). On 2-5 the left has ou
 and 1 2 3 4 5, the current one bold and underlined, the rest faded; workspace 1 has no numbers.
 Up from the top book (or from 2-5) goes to the bar, Left/Right along the icons, OK runs it, Down comes back.
 The 1080p picture now fades out over 350 ms once the 4K clip is up, instead of switching.
+
+## Holmes Haven phone app, M1 (launcher/companion, package com.holmeshaven.companion)
+Plan: ~/Nook/projects/companion/PLAN.md on the NUC (the only plan). Built with the launcher: `./gradlew assembleRelease`
+also gives `companion/build/outputs/apk/release/companion-release-unsigned.apk`; Nook signs it with Colin's key.
+- **Phone:** finds the TV over mDNS (`_omarchytv._tcp`, or type its address), pairs with the 6-digit code on the TV
+  (Omarchy Link SPAKE2; the phone also checks the TV's confirm, so a fake TV can't pair), then signs every request and
+  checks every answer's X-OTV-Sig. The token is sealed with an Android Keystore key; backups are off. Home shows the TV's
+  status (screen, what's on, TV software, Android, uptime, storage) and checks for an update every time it opens.
+  LinkCrypto.java is a copy of the launcher's (only base64 differs); keep the two in step.
+- **TV, Phones (ColinPhones.java):** in the floating bar, Left past the first tray icon reaches the Holmes Haven logo; OK
+  opens Phones: the paired devices (OK twice forgets one) and "Allow a new phone", which opens pairing for 60 s with a
+  big colourful code. Pairing is refused whenever that window is closed.
+- **TV, updates (link/ColinCompanion.java):** put the newest phone APK at
+  `/sdcard/Android/data/com.omarchytv.home/files/companion/holmes-haven.apk`. Signed routes:
+  `GET /v1/companion/update` ({available, package, versionCode, versionName, size, sha256}) and `GET /v1/companion/apk`.
+  The phone installs it only if the SHA-256 matches; Android then asks to confirm and refuses another signing key.
+  `/v1/status` also carries uptimeS, storageFreeMB, storageTotalMB and androidVersion.
