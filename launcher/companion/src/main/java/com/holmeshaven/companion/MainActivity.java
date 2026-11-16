@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
         sv.addView(page, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(sv);
         finder = new Finder(this);
+        Link.useWifi(this);
         tv = Vault.load(this);
         if (tv == null) showFind();
         else showHome();
@@ -398,7 +399,13 @@ public final class MainActivity extends Activity {
         remoteLine.setTextColor(GOLD);
         remoteLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         top.addView(remoteLine, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button power = roundKey("⏻", COSMIC, 64);
+        Button power = roundKey("", COSMIC, 64);
+        power.setContentDescription("Power");
+        // The phone's font has no power glyph (it showed as a strange box), so draw the symbol on top of the circle.
+        android.graphics.drawable.LayerDrawable face = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
+                power.getBackground(), getDrawable(R.drawable.ic_power)});
+        face.setLayerInset(1, dp(16), dp(16), dp(16), dp(16));
+        power.setBackground(face);
         power.setOnClickListener(v -> powerTap());
         power.setOnLongClickListener(v -> {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
@@ -583,7 +590,7 @@ public final class MainActivity extends Activity {
             case "needs_allow": s = "On the TV: tick “Always allow”, then Allow (only once)"; break;
             case "remote_starting": s = "Getting the remote ready…"; break;
             case "adb_off": s = "The TV's debugging is off, so the remote can't press keys"; break;
-            case "unreachable": s = "Can't reach the TV. If it's off, tap ⏻ to wake it"; break;
+            case "unreachable": s = "Can't reach the TV. If it's off, tap the power button to wake it"; break;
             default: s = "The TV said: " + code;
         }
         remoteLine.setText(s);
@@ -634,6 +641,7 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 16; i++) System.arraycopy(m, 0, pkt, 6 + i * 6, 6);
         String subnet = host.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+") ? host.substring(0, host.lastIndexOf('.')) + ".255" : null;
         try (java.net.DatagramSocket s = new java.net.DatagramSocket()) {
+            Link.bind(s);
             s.setBroadcast(true);
             String[] targets = subnet == null ? new String[]{"255.255.255.255"} : new String[]{subnet, "255.255.255.255"};
             for (int round = 0; round < 3; round++) {

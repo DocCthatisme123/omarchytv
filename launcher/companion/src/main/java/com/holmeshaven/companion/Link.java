@@ -18,6 +18,36 @@ import java.nio.charset.StandardCharsets;
 final class Link {
     static final int PORT = 47800;
 
+    /**
+     * The home Wi-Fi, once Android has it. Samsung phones move apps onto mobile data when they think the Wi-Fi is
+     * weak ("Switch to mobile data"), and the TV can't be reached that way: so every call goes over Wi-Fi itself.
+     */
+    private static volatile android.net.Network wifi;
+
+    static void useWifi(android.content.Context c) {
+        android.net.ConnectivityManager cm = c.getSystemService(android.net.ConnectivityManager.class);
+        if (cm == null) return;
+        android.net.NetworkRequest req = new android.net.NetworkRequest.Builder()
+                .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build();
+        try {
+            cm.registerNetworkCallback(req, new android.net.ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(android.net.Network n) { wifi = n; }
+                @Override public void onLost(android.net.Network n) { if (n.equals(wifi)) wifi = null; }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Send a UDP socket (Wake-on-LAN) over the Wi-Fi too. */
+    static void bind(java.net.DatagramSocket s) {
+        android.net.Network n = wifi;
+        if (n == null) return;
+        try {
+            n.bindSocket(s);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** An answer that isn't 2xx, with the TV's error code ("pairing_closed", "bad_code", ...). */
     static final class Error extends IOException {
         final int status;
@@ -163,14 +193,45 @@ final class Link {
     }
 
     private static Reply http(String host, String method, String path, byte[] body, String auth, int timeoutMs) throws IOException {
+        // A phone whose Wi-Fi has been dozing often loses the first connection attempt: nothing has been sent yet
+        // then, so trying again is safe (never a double key press).
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return http1(host, method, path, body, auth, timeoutMs);
+            } catch (NotConnected e) {
+                if (attempt >= 2) throw e.cause;
+                try {
+                    Thread.sleep(400);
+                } catch (InterruptedException i) {
+                    throw e.cause;
+                }
+            }
+        }
+    }
+
+    private static final class NotConnected extends Exception {
+        final IOException cause;
+
+        NotConnected(IOException cause) {
+            this.cause = cause;
+        }
+    }
+
+    private static Reply http1(String host, String method, String path, byte[] body, String auth, int timeoutMs) throws IOException, NotConnected {
         URL u = new URL("http", host, PORT, path);
-        HttpURLConnection c = (HttpURLConnection) u.openConnection();
+        android.net.Network n = wifi;
+        HttpURLConnection c = (HttpURLConnection) (n != null ? n.openConnection(u) : u.openConnection());
         try {
-            c.setConnectTimeout(Math.min(timeoutMs, 5000));
+            c.setConnectTimeout(Math.min(timeoutMs, 3000));
             c.setReadTimeout(timeoutMs);
             c.setRequestMethod(method);
             c.setUseCaches(false);
             if (auth != null) c.setRequestProperty("Authorization", auth);
+            try {
+                c.connect();
+            } catch (IOException e) {
+                throw new NotConnected(e);
+            }
             if (body != null) {
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "application/json");
