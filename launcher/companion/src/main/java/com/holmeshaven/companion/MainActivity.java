@@ -45,6 +45,11 @@ public final class MainActivity extends Activity {
             MUTED = 0xFF94A3B8, CARD = 0x26FFFFFF;
 
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
+    /** Key presses get their own thread, so a slow status refresh never delays the remote. */
+    private final ExecutorService keys = Executors.newSingleThreadExecutor();
+    private TextView remoteLine;
+    /** Last status: null = TV didn't answer (off or away), else whether its screen is on. */
+    private Boolean screenOn;
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout page;
     private Finder finder;
@@ -78,7 +83,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (onHome) refresh(true);   // update-on-open: every time the app comes to the front
+        if (onHome) {
+            refresh(true);   // update-on-open: every time the app comes to the front
+            warm();
+        }
     }
 
     @Override
@@ -91,6 +99,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         bg.shutdownNow();
+        keys.shutdownNow();
     }
 
     // ---- 1. find the TV ------------------------------------------------------------------------
@@ -102,14 +111,14 @@ public final class MainActivity extends Activity {
         body("Make sure this phone is on the home Wi-Fi. Your TV shows up here by itself.");
         LinearLayout list = column();
         page.addView(list);
-        TextView searching = body("Looking…");
+        TextView searching = body("Looking\u2026");
         searching.setTextColor(MUTED);
         list.addView(own(searching));
         Set<String> seen = new HashSet<>();
         finder.start((name, host, tvId, open) -> {
             if (!seen.add(host)) return;
             list.removeView(searching);
-            Button btn = button("📺  " + name, AURORA, NEBULA);
+            Button btn = button("\u1F4FA  " + name, AURORA, NEBULA);
             btn.setOnClickListener(v -> showPair(host, name));
             list.addView(own(btn));
         });
@@ -143,7 +152,7 @@ public final class MainActivity extends Activity {
         steps(new String[]{
                 "On the TV, press Up to reach the bar at the top.",
                 "Press Left until the Holmes Haven logo lights up, then OK.",
-                "Choose “Allow a new phone”. A big code appears.",
+                "Choose \u201CAllow a new phone\u201D. A big code appears.",
                 "Type that code here."});
         EditText code = input("123456", InputType.TYPE_CLASS_NUMBER);
         code.setFilters(new InputFilter[]{new InputFilter.LengthFilter(6)});
@@ -161,7 +170,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             hideKeyboard(code);
-            toastLine(msg, "Pairing…");
+            toastLine(msg, "Pairing\u2026");
             msg.setTextColor(MOON);
             work(() -> {
                 Link.Paired p = Link.pair(host, Vault.phoneId(this), phoneName(), c);
@@ -194,7 +203,11 @@ public final class MainActivity extends Activity {
         onHome = true;
         clear();
         header(tv.name);
-        statusLine = small("Checking the TV…");
+        remote();
+        space(18);
+        TextView about = text("About the TV", 18, GOLD, true);
+        about.setTypeface(Typeface.create(Typeface.SERIF, Typeface.BOLD));
+        statusLine = small("Checking the TV\u2026");
         statusLine.setTextColor(MOON);
         LinearLayout card = card();
         statusRows = column();
@@ -215,7 +228,7 @@ public final class MainActivity extends Activity {
         Button refresh = button("Refresh", AURORA, NEBULA);
         refresh.setOnClickListener(v -> refresh(true));
         space(24);
-        TextView next = small("The remote and the app list come next.");
+        TextView next = small("The app list comes next.");
         next.setGravity(Gravity.CENTER);
         Button forget = flat("Forget this TV");
         forget.setOnClickListener(v -> new AlertDialog.Builder(this)
@@ -267,6 +280,7 @@ public final class MainActivity extends Activity {
         }, e -> {
             busy = false;
             if (!onHome) return;
+            screenOn = null;
             statusLine.setVisibility(View.GONE);
             statusRows.removeAllViews();
             if (e instanceof Link.Error && ((Link.Error) e).status == 401 && "unauthorized".equals(((Link.Error) e).code)) {
@@ -290,6 +304,11 @@ public final class MainActivity extends Activity {
         statusLine.setVisibility(View.GONE);
         statusRows.removeAllViews();
         boolean on = s.optBoolean("screenOn", true);
+        screenOn = on;
+        String mac = s.optString("wakeMac", "");
+        if (mac.matches("([0-9a-f]{2}:){5}[0-9a-f]{2}")) getSharedPreferences("tv", MODE_PRIVATE).edit().putString("mac", mac).apply();
+        String rs = s.optString("remote", "");
+        if ("needs_allow".equals(rs) || "adb_off".equals(rs)) remoteHint(rs);
         row("Screen", on ? "on" : "asleep", on ? LEAF : GOLD);
         JSONObject fg = s.optJSONObject("foreground");
         String now = fg == null ? "" : fg.optString("label", "");
@@ -307,7 +326,7 @@ public final class MainActivity extends Activity {
     private void showOffer(JSONObject o) {
         offer = o;
         if (o == null) {
-            updateLine.setText("Holmes Haven " + version() + "  ·  up to date");
+            updateLine.setText("Holmes Haven " + version() + "  \u00B7  up to date");
             updateButton.setVisibility(View.GONE);
         } else {
             updateLine.setText("A new version is ready: " + o.optString("versionName", "?"));
@@ -322,14 +341,14 @@ public final class MainActivity extends Activity {
         if (!getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(this)
                     .setTitle("Allow updates")
-                    .setMessage("Android needs your OK once: turn on “Allow from this source” for Holmes Haven, then come back and press Update.")
+                    .setMessage("Android needs your OK once: turn on \u201CAllow from this source\u201D for Holmes Haven, then come back and press Update.")
                     .setPositiveButton("Open settings", (d, w) -> startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                             Uri.parse("package:" + getPackageName()))))
                     .setNegativeButton("Later", null).show();
             return;
         }
         updateButton.setEnabled(false);
-        updateLine.setText("Downloading from the TV…");
+        updateLine.setText("Downloading from the TV\u2026");
         final JSONObject o = offer;
         final Vault.Tv t = tv;
         work(() -> {
@@ -364,6 +383,252 @@ public final class MainActivity extends Activity {
         }
         main.post(finder::stop);
         return hit[0];
+    }
+
+    // ---- the remote (M2) -------------------------------------------------------------------------
+
+    private void remote() {
+        // power: tap = sleep or wake, hold = the TV's shutdown prompt (like the real power button)
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        remoteLine = new TextView(this);
+        remoteLine.setTextColor(GOLD);
+        remoteLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        top.addView(remoteLine, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button power = roundKey("⏻", COSMIC, 64);
+        power.setOnClickListener(v -> powerTap());
+        power.setOnLongClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            press("power", true);
+            return true;
+        });
+        top.addView(power, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        page.addView(top);
+        remoteLine.setText("");
+
+        DPad pad = new DPad(this, k -> press(k, false));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(8);
+        lp.leftMargin = lp.rightMargin = dp(18);
+        page.addView(pad, lp);
+
+        keyRow(new String[]{"↩  Back", "⌂  Home", "☰  Menu"}, new String[]{"back", "home", "menu"},
+                new int[]{NEBULA, AURORA, 0xFF475569});
+        keyRow(new String[]{"⏪", "⏯", "⏩"}, new String[]{"rewind", "play_pause", "fast_forward"},
+                new int[]{0xFF334155, LEAF, 0xFF334155});
+        keyRow(new String[]{"Vol −", "Mute", "Vol +"}, new String[]{"volume_down", "mute", "volume_up"},
+                new int[]{AURORA, 0xFF475569, AURORA});
+        keyRow(new String[]{"CH −", "CH +"}, new String[]{"channel_down", "channel_up"}, new int[]{NEBULA, NEBULA});
+
+        space(10);
+        TextView ws = small("Workspaces");
+        ws.setTextColor(GOLD);
+        int[] fam = {AURORA, COSMIC, LEAF, GOLD, NEBULA};
+        for (int row = 0; row < 2; row++) {
+            LinearLayout r = new LinearLayout(this);
+            for (int i = 1; i <= 5; i++) {
+                final int n = row * 5 + i;
+                Button b = roundKey(n == 10 ? "0" : String.valueOf(n), row == 0 ? fam[i - 1] : 0xFF334155, 52);
+                b.setOnClickListener(v -> workspace(n));
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(52), 1f);
+                p.setMargins(dp(4), dp(4), dp(4), dp(4));
+                r.addView(b, p);
+            }
+            page.addView(r);
+        }
+
+        // number pad for Live TV channels, folded away until needed
+        Button more = flat("Numbers ▾");
+        LinearLayout nums = column();
+        nums.setVisibility(View.GONE);
+        String[][] grid = {{"1", "2", "3"}, {"4", "5", "6"}, {"7", "8", "9"}, {"0"}};
+        for (String[] g : grid) {
+            LinearLayout r = new LinearLayout(this);
+            r.setGravity(Gravity.CENTER);
+            for (String k : g) {
+                Button b = roundKey(k, 0xFF334155, 56);
+                b.setOnClickListener(v -> press(k, false));
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(56), 1f);
+                p.setMargins(dp(4), dp(4), dp(4), dp(4));
+                r.addView(b, p);
+            }
+            nums.addView(r);
+        }
+        page.addView(nums);
+        more.setOnClickListener(v -> {
+            boolean show = nums.getVisibility() != View.VISIBLE;
+            nums.setVisibility(show ? View.VISIBLE : View.GONE);
+            more.setText(show ? "Numbers ▴" : "Numbers ▾");
+        });
+    }
+
+    private void keyRow(String[] labels, String[] names, int[] colours) {
+        LinearLayout r = new LinearLayout(this);
+        for (int i = 0; i < labels.length; i++) {
+            final String k = names[i];
+            Button b = roundKey(labels[i], colours[i], 54);
+            b.setOnClickListener(v -> press(k, false));
+            if (k.startsWith("volume")) {   // hold volume = keep going
+                b.setOnLongClickListener(v -> {
+                    repeatWhileHeld(v, k);
+                    return true;
+                });
+            }
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(54), 1f);
+            p.setMargins(dp(4), dp(5), dp(4), dp(5));
+            r.addView(b, p);
+        }
+        page.addView(r);
+    }
+
+    private void repeatWhileHeld(View v, String k) {
+        Runnable rep = new Runnable() {
+            @Override public void run() {
+                if (!v.isPressed()) return;
+                press(k, false);
+                main.postDelayed(this, 180);
+            }
+        };
+        main.post(rep);
+    }
+
+    private Button roundKey(String label, int colour, int heightDp) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextColor(Color.WHITE);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, label.length() <= 2 ? 22 : 16);
+        b.setMinHeight(dp(heightDp));
+        b.setMinimumHeight(dp(heightDp));
+        b.setPadding(0, 0, 0, 0);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(colour);
+        g.setCornerRadius(dp(heightDp / 2f));
+        b.setBackground(g);
+        b.setStateListAnimator(null);
+        b.setOnTouchListener((v, e) -> {   // a small buzz on every press, so you feel it went
+            if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+            return false;
+        });
+        return b;
+    }
+
+    /** One press on the TV. Shows the reason if the remote isn't ready yet (first time: the TV's Allow prompt). */
+    private void press(String key, boolean hold) {
+        final Vault.Tv t = tv;
+        if (t == null) return;
+        keys.execute(() -> {
+            try {
+                JSONObject b = new JSONObject().put("key", key);
+                if (hold) b.put("hold", true);
+                new Link(t.host, t.pcId, t.token).postJson("/v1/haven/key", b);
+                main.post(() -> remoteHint(""));
+            } catch (Link.Error e) {
+                main.post(() -> remoteHint(e.code));
+            } catch (Exception e) {
+                main.post(() -> remoteHint("unreachable"));
+            }
+        });
+    }
+
+    private void workspace(int n) {
+        final Vault.Tv t = tv;
+        if (t == null) return;
+        keys.execute(() -> {
+            try {
+                new Link(t.host, t.pcId, t.token).postJson("/v1/haven/workspace", new JSONObject().put("n", n));
+                main.post(() -> remoteHint(""));
+            } catch (Link.Error e) {
+                main.post(() -> remoteHint(e.code));
+            } catch (Exception e) {
+                main.post(() -> remoteHint("unreachable"));
+            }
+        });
+    }
+
+    /** The phone app opened: ask the TV to get its remote ready, so the first press is quick. */
+    private void warm() {
+        final Vault.Tv t = tv;
+        if (t == null) return;
+        keys.execute(() -> {
+            try {
+                JSONObject o = new Link(t.host, t.pcId, t.token).postJson("/v1/haven/warm", null);
+                String rs = o.optString("remote", "");
+                if ("needs_allow".equals(rs) || "adb_off".equals(rs)) main.post(() -> remoteHint(rs));
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    private void remoteHint(String code) {
+        if (remoteLine == null) return;
+        String s;
+        switch (code) {
+            case "": s = ""; break;
+            case "needs_allow": s = "On the TV: tick “Always allow”, then Allow (only once)"; break;
+            case "remote_starting": s = "Getting the remote ready… press again in a moment"; break;
+            case "adb_off": s = "The TV's debugging is off, so the remote can't press keys"; break;
+            case "unreachable": s = "Can't reach the TV. If it's off, tap ⏻ to wake it"; break;
+            default: s = "The TV said: " + code;
+        }
+        remoteLine.setText(s);
+    }
+
+    /** Power tap: awake -> sleep, asleep -> wake, no answer -> Wake-on-LAN (works from a full shutdown too). */
+    private void powerTap() {
+        final Vault.Tv t = tv;
+        if (t == null) return;
+        keys.execute(() -> {
+            Link link = new Link(t.host, t.pcId, t.token);
+            try {
+                JSONObject st = link.getJson("/v1/status");
+                boolean on = st.optBoolean("screenOn", true);
+                link.postJson("/v1/haven/key", new JSONObject().put("key", on ? "sleep" : "wakeup"));
+                main.post(() -> {
+                    screenOn = !on;
+                    remoteHint("");
+                });
+            } catch (Link.Error e) {
+                main.post(() -> remoteHint(e.code));
+            } catch (Exception e) {
+                String mac = getSharedPreferences("tv", MODE_PRIVATE).getString("mac", "");
+                boolean sent = wakeOnLan(mac, t.host);
+                main.post(() -> {
+                    if (remoteLine == null) return;
+                    remoteLine.setText(sent ? "Waking the TV… from a full shutdown it takes about 40 seconds"
+                            : "Can't reach the TV, and it hasn't told this phone its wake address yet");
+                    if (sent) main.postDelayed(() -> refresh(false), 45_000);
+                });
+            }
+        });
+    }
+
+    /** Magic packet (6 x FF, then the MAC 16 times) to the LAN broadcast, a few times. Blocking. */
+    private static boolean wakeOnLan(String mac, String host) {
+        if (mac == null || !mac.matches("([0-9a-f]{2}:){5}[0-9a-f]{2}")) return false;
+        byte[] m = new byte[6];
+        String[] parts = mac.split(":");
+        for (int i = 0; i < 6; i++) m[i] = (byte) Integer.parseInt(parts[i], 16);
+        byte[] pkt = new byte[6 + 16 * 6];
+        for (int i = 0; i < 6; i++) pkt[i] = (byte) 0xFF;
+        for (int i = 0; i < 16; i++) System.arraycopy(m, 0, pkt, 6 + i * 6, 6);
+        String subnet = host.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+") ? host.substring(0, host.lastIndexOf('.')) + ".255" : null;
+        try (java.net.DatagramSocket s = new java.net.DatagramSocket()) {
+            s.setBroadcast(true);
+            String[] targets = subnet == null ? new String[]{"255.255.255.255"} : new String[]{subnet, "255.255.255.255"};
+            for (int round = 0; round < 3; round++) {
+                for (String to : targets) {
+                    for (int port : new int[]{9, 7}) {
+                        s.send(new java.net.DatagramPacket(pkt, pkt.length, java.net.InetAddress.getByName(to), port));
+                    }
+                }
+                Thread.sleep(300);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // ---- small helpers -------------------------------------------------------------------------

@@ -74,3 +74,15 @@ also gives `companion/build/outputs/apk/release/companion-release-unsigned.apk`;
   `GET /v1/companion/update` ({available, package, versionCode, versionName, size, sha256}) and `GET /v1/companion/apk`.
   The phone installs it only if the SHA-256 matches; Android then asks to confirm and refuses another signing key.
   `/v1/status` also carries uptimeS, storageFreeMB, storageTotalMB and androidVersion.
+
+## Holmes Haven phone app, M2: the remote (ColinRemote.java)
+Android won't let an app press keys in other apps, and SELinux stops the shell writing to the IR receiver, so the
+launcher opens its own ADB (LocalAdb, 127.0.0.1:5555) and keeps Android's `hid -` tool running on one stream: a virtual
+"Holmes Haven Remote" (HID consumer control + keyboard). Key reports reach every app as real remote presses
+(Netflix and YouTube too), a few ms each. First use: the TV asks "Allow USB debugging?" for the launcher's key; tick
+Always allow. Needs adb on 5555 to stay on (Colin, 2026-11-16: option 1; Google's remote service is the fallback).
+Routes (signed): `POST /v1/haven/key {key, hold}` (up/down/left/right/select/back/home/menu, media, volume, mute,
+channel_up/down, 0-9, power; hold=true on power = the shutdown prompt; "wakeup"/"sleep" press power only if needed),
+`POST /v1/haven/workspace {n}` (Home, 0.7 s, then the number), `POST /v1/haven/warm` (the app opened: connect now).
+`/v1/status` carries `remote` (off/starting/needs_allow/adb_off/ready) and `wakeMac` (from `dumpsys ethernet`, since
+apps can't read the MAC on Android 10); the phone keeps it and sends Wake-on-LAN when the TV doesn't answer.

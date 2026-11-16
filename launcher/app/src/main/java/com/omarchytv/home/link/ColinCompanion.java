@@ -29,6 +29,18 @@ public final class ColinCompanion {
     private static final long MAX_APK = 8L * 1024 * 1024;   // held in memory on a 32-bit TV; ours is ~0.2 MB
 
     private static volatile Context app;
+
+    /** The phone remote (ColinRemote, in the launcher package; set at start). */
+    public interface Remote {
+        JSONObject key(String name, boolean hold);
+        JSONObject workspace(int n);
+        JSONObject power(boolean wake);
+        void warm();
+        String state();
+        String mac();
+    }
+
+    public static volatile Remote remote;
     private static String shaKey, sha;
 
     private ColinCompanion() {
@@ -46,7 +58,8 @@ public final class ColinCompanion {
     }
 
     /** One of ours, or null so LinkServer carries on with its own routes. */
-    static LinkServer.Response route(String m, String p) throws JSONException {
+    static LinkServer.Response route(String m, String p, JSONObject body) throws JSONException {
+        if ("POST".equals(m) && p != null && p.startsWith("/v1/haven/")) return haven(p, body);
         if (!"GET".equals(m) || p == null || !p.startsWith("/v1/companion/")) return null;
         if ("/v1/companion/update".equals(p)) return new LinkServer.Response(200, update());
         if ("/v1/companion/apk".equals(p)) {
@@ -62,6 +75,31 @@ public final class ColinCompanion {
             }
         }
         return new LinkServer.Response(404, new JSONObject().put("error", "not_found"));
+    }
+
+    /**
+     * POST /v1/haven/key {key, hold}: a real remote press (see ColinRemote); key "wakeup" / "sleep" = power only if
+     * needed. POST /v1/haven/workspace {n}: Home, then workspace n (1-10).
+     * 200 {ok}, or 503 {error: remote_starting | needs_allow | adb_off}, 400 {error: bad_key}.
+     */
+    private static LinkServer.Response haven(String p, JSONObject body) throws JSONException {
+        Remote r = remote;
+        if (r == null) return new LinkServer.Response(503, new JSONObject().put("error", "remote_starting"));
+        JSONObject o;
+        if ("/v1/haven/key".equals(p)) {
+            String k = body.optString("key", "");
+            o = "wakeup".equals(k) ? r.power(true) : "sleep".equals(k) ? r.power(false) : r.key(k, body.optBoolean("hold", false));
+        } else if ("/v1/haven/warm".equals(p)) {   // the phone app opened: get the remote ready, quick first press
+            r.warm();
+            o = new JSONObject().put("ok", true).put("remote", r.state());
+        } else if ("/v1/haven/workspace".equals(p)) {
+            o = r.workspace(body.optInt("n", 0));
+        } else {
+            return new LinkServer.Response(404, new JSONObject().put("error", "not_found"));
+        }
+        String e = o.optString("error", "");
+        int status = e.isEmpty() ? 200 : e.startsWith("bad_") ? 400 : 503;
+        return new LinkServer.Response(status, o);
     }
 
     private static JSONObject update() throws JSONException {
@@ -88,6 +126,11 @@ public final class ColinCompanion {
             o.put("storageFreeMB", fs.getAvailableBytes() / (1024 * 1024));
             o.put("storageTotalMB", fs.getTotalBytes() / (1024 * 1024));
             o.put("androidVersion", android.os.Build.VERSION.RELEASE);
+            Remote r = remote;
+            if (r != null) {
+                o.put("remote", r.state());
+                if (r.mac() != null) o.put("wakeMac", r.mac());
+            }
         } catch (Exception ignored) {
         }
     }

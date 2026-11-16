@@ -135,6 +135,38 @@ final class LocalAdb implements Closeable {
         }
     }
 
+    /**
+     * Colin's fork: a shell command we keep feeding over stdin (the Holmes Haven phone remote writes key reports to
+     * `hid -`). Returns the stream id; write to it with {@link #write}. Not thread-safe: one caller thread.
+     */
+    int openStream(String command) throws IOException {
+        int local = nextLocalId++;
+        send(OPEN, local, 0, ("shell:" + command + "\0").getBytes(StandardCharsets.UTF_8));
+        while (true) {
+            Message m = read();
+            if (m.arg1 != local) continue;
+            if (m.command == OKAY) {
+                streamRemote = m.arg0;
+                return local;
+            }
+            if (m.command == CLSE) throw new IOException("ADB refused " + command);
+        }
+    }
+
+    /** Writes to a stream from {@link #openStream} and waits for adbd's OKAY. Output from the command is dropped. */
+    void write(int local, byte[] data) throws IOException {
+        send(WRTE, local, streamRemote, data);
+        while (true) {
+            Message m = read();
+            if (m.arg1 != local) continue;
+            if (m.command == OKAY) return;
+            if (m.command == WRTE) send(OKAY, local, m.arg0, null);
+            else if (m.command == CLSE) throw new IOException("the command ended");
+        }
+    }
+
+    private int streamRemote;
+
     @Override public void close() {
         try { socket.close(); } catch (IOException ignored) {}
     }

@@ -118,6 +118,7 @@ public final class OmarchyLink implements LinkServer.Host {
         OmarchyLink r = new OmarchyLink();
         r.app = app;
         com.omarchytv.home.link.ColinCompanion.init(app);   // Colin's fork: phone app update file
+        ColinRemote.init(app);   // Colin's fork: phone remote (virtual HID over the TV's own ADB)
         runtime = r;
         bg.execute(r::boot);
     }
