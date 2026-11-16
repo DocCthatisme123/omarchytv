@@ -227,15 +227,17 @@ final class Link {
             c.setRequestMethod(method);
             c.setUseCaches(false);
             if (auth != null) c.setRequestProperty("Authorization", auth);
+            if (body != null) {   // set up before connect(): afterwards Android refuses (IllegalStateException)
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "application/json");
+                c.setFixedLengthStreamingMode(body.length);
+            }
             try {
                 c.connect();
             } catch (IOException e) {
                 throw new NotConnected(e);
             }
             if (body != null) {
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json");
-                c.setFixedLengthStreamingMode(body.length);
                 try (OutputStream o = c.getOutputStream()) {
                     o.write(body);
                 }
