@@ -313,6 +313,7 @@ public final class MainActivity extends Activity {
         if (mac.matches("([0-9a-f]{2}:){5}[0-9a-f]{2}")) getSharedPreferences("tv", MODE_PRIVATE).edit().putString("mac", mac).apply();
         String rs = s.optString("remote", "");
         if ("needs_allow".equals(rs) || "adb_off".equals(rs)) remoteHint(rs);
+        else if ("unreachable".equals(hintCode)) remoteHint("");   // the TV answered: that old message is wrong now
         row("Screen", on ? "on" : "asleep", on ? LEAF : GOLD);
         JSONObject fg = s.optJSONObject("foreground");
         String now = fg == null ? "" : fg.optString("label", "");
@@ -392,19 +393,21 @@ public final class MainActivity extends Activity {
     // ---- the remote (M2) -------------------------------------------------------------------------
 
     private void remote() {
-        // power: tap = sleep or wake, hold = the TV's shutdown prompt (like the real power button)
+        // power: tap = sleep or wake, hold = our power menu on the TV (Sleep, Restart, Turn off)
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         remoteLine = new TextView(this);
         remoteLine.setTextColor(GOLD);
         remoteLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         top.addView(remoteLine, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button power = roundKey("", COSMIC, 64);
+        Button power = roundKey("", 0xFF1B2547, 56);
         power.setContentDescription("Power");
         // The phone's font has no power glyph (it showed as a strange box), so draw the symbol on top of the circle.
         android.graphics.drawable.LayerDrawable face = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
                 power.getBackground(), getDrawable(R.drawable.ic_power)});
-        face.setLayerInset(1, dp(16), dp(16), dp(16), dp(16));
+        ((GradientDrawable) power.getBackground()).setStroke(dp(2), COSMIC);
+        face.getDrawable(1).setTint(COSMIC);
+        face.setLayerInset(1, dp(14), dp(14), dp(14), dp(14));
         power.setBackground(face);
         power.setOnClickListener(v -> powerTap());
         power.setOnLongClickListener(v -> {
@@ -412,9 +415,11 @@ public final class MainActivity extends Activity {
             press("power", true);
             return true;
         });
-        top.addView(power, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(dp(56), dp(56));
+        plp.leftMargin = dp(12);
+        top.addView(power, plp);
         page.addView(top);
-        remoteLine.setText("");
+        remoteHint("");
 
         DPad pad = new DPad(this, k -> press(k, false));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -533,7 +538,10 @@ public final class MainActivity extends Activity {
                 JSONObject b = new JSONObject().put("key", key);
                 if (hold) b.put("hold", true);
                 new Link(t.host, t.pcId, t.token).postJson("/v1/haven/key", b);
-                main.post(() -> remoteHint(""));
+                main.post(() -> {
+                    remoteHint(hold ? "power_menu" : "");
+                    if (hold) main.postDelayed(() -> { if ("power_menu".equals(hintCode)) remoteHint(""); }, 8000);
+                });
             } catch (Link.Error e) {
                 main.post(() -> remoteHint(e.code));
             } catch (Exception e) {
@@ -582,11 +590,15 @@ public final class MainActivity extends Activity {
     private int warmChecks;
     private boolean waitingForRemote;
 
+    private String hintCode = "";
+
     private void remoteHint(String code) {
         if (remoteLine == null) return;
+        hintCode = code;
         String s;
         switch (code) {
             case "": s = ""; break;
+            case "power_menu": s = "The power menu is on the TV: pick with the arrows, then OK"; break;
             case "needs_allow": s = "On the TV: tick “Always allow”, then Allow (only once)"; break;
             case "remote_starting": s = "Getting the remote ready…"; break;
             case "adb_off": s = "The TV's debugging is off, so the remote can't press keys"; break;
@@ -594,6 +606,7 @@ public final class MainActivity extends Activity {
             default: s = "The TV said: " + code;
         }
         remoteLine.setText(s);
+        remoteLine.setVisibility(s.isEmpty() ? View.INVISIBLE : View.VISIBLE);   // keeps the power key on the right
         if (("needs_allow".equals(code) || "remote_starting".equals(code)) && !waitingForRemote) {
             waitingForRemote = true;   // keep checking; the line clears once the remote is ready
             warmChecks = 0;

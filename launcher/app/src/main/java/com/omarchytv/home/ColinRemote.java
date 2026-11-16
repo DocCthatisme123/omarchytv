@@ -90,7 +90,30 @@ final class ColinRemote {
     static JSONObject key(String name, boolean hold) {
         int[] k = KEYS.get(name);
         if (k == null) return err("bad_key");
-        return send(press(k, hold && "power".equals(name) ? 1500 : 40));
+        if (hold && "power".equals(name)) {   // Skyworth ignores a held power key from us: our own power menu instead
+            Context c = app;
+            if (c == null) return err("remote_starting");
+            ColinPower.request(c);
+            return ok();
+        }
+        return send(press(k, 40));
+    }
+
+    /** The power menu's Sleep (UI thread): press power off the UI thread. */
+    static void sleepSoon() {
+        new Thread(() -> power(false), "haven-sleep").start();
+    }
+
+    /** The power menu's Restart / Turn off: a fixed command (never text from the phone) on our ADB shell. */
+    static void shellSoon(String fixedCommand) {
+        worker.submit(() -> {
+            try {
+                ensure();
+                adb.shell(fixedCommand);
+            } catch (Exception e) {
+                Log.w(TAG, "power menu: " + e.getMessage());
+            }
+        });
     }
 
     /** Power button meaning "wake" or "sleep" (no-op if the TV already is). */

@@ -164,9 +164,18 @@ final class ColinHavenHome extends View {
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 
+    /** The phone's power menu, over Home if Home is in front (UI thread). False = bring Home first. */
+    static boolean openPower() {
+        ColinHavenHome v = view;
+        if (v == null || v.root == null || !OmarchyLink.homeVisible()) return false;
+        ColinPower.open((Activity) v.getContext(), v.root);
+        return true;
+    }
+
     static void show() {
         ColinHavenHome v = view;
         if (v == null) return;
+        if (ColinPower.pending()) v.post(() -> ColinPower.open((Activity) v.getContext(), v.root));
         // onNewIntent and onResume both call show(): keep the phone's request for both, then let it go.
         int want = SystemClock.uptimeMillis() - pendingAt < 2000 ? pendingPage : 0;
         v.hidden = false;
@@ -310,6 +319,7 @@ final class ColinHavenHome extends View {
 
     /** From MainActivity.dispatchKeyEvent (after the boot screen). True = handled here. */
     static boolean consumeKey(KeyEvent e) {
+        if (ColinPower.consumeKey(e)) return true;    // the phone's power menu is open
         if (ColinPhones.consumeKey(e)) return true;   // "Phones" (pairing) is open over the room
         ColinHavenHome v = view;
         if (v == null || v.hidden) return false;
