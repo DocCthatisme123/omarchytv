@@ -144,7 +144,12 @@ final class ColinRemote {
             Object r = f.get(3, TimeUnit.SECONDS);
             return Boolean.TRUE.equals(r) ? ok() : err("remote_starting");
         } catch (Exception e) {
-            return ok();   // still writing (a held power key): it'll land
+            JSONObject o = ok();   // still writing (a held power key): it should land
+            try {
+                o.put("pending", true);
+            } catch (Exception ignored) {
+            }
+            return o;
         }
     }
 
@@ -154,8 +159,16 @@ final class ColinRemote {
         Context c = app;
         if (c == null) throw new IllegalStateException("not started");
         state = "starting";
+        android.content.SharedPreferences prefs = c.getSharedPreferences("haven_remote", Context.MODE_PRIVATE);
+        // First time: say on the TV, before Android's prompt, that it's ours (Colin only taps Allow when we asked).
+        if (!prefs.getBoolean("allowed", false)) explain(c, "Holmes Haven Remote: the TV will now ask \u201cAllow USB debugging?\u201d. "
+                + "That's your phone remote. Tick \u201cAlways allow\u201d, then OK.");
         try {
-            adb = LocalAdb.connect(c, 60_000, () -> state = "needs_allow");
+            adb = LocalAdb.connect(c, 60_000, () -> {
+                state = "needs_allow";
+                explain(c, "Holmes Haven Remote: tick \u201cAlways allow\u201d, then OK");
+            });
+            prefs.edit().putBoolean("allowed", true).apply();
         } catch (java.io.IOException e) {
             String m = String.valueOf(e.getMessage());
             state = m.contains("port 5555") ? "adb_off" : m.contains("accepted") || m.contains("rejected") ? "needs_allow" : "off";
@@ -176,6 +189,13 @@ final class ColinRemote {
             drop();
             throw e;
         }
+    }
+
+    /** A long toast on the TV, on the UI thread. */
+    private static void explain(Context c, String text) {
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            for (int i = 0; i < 2; i++) android.widget.Toast.makeText(c, text, android.widget.Toast.LENGTH_LONG).show();
+        });
     }
 
     private static void drop() {
