@@ -109,7 +109,8 @@ final class ColinRemote {
         worker.submit(() -> {
             try {
                 ensure();
-                adb.shell(fixedCommand);
+                String out = adb.shell(fixedCommand);
+                Log.i(TAG, "power menu: " + fixedCommand + " -> " + (out == null ? "" : out.trim()));
             } catch (Exception e) {
                 Log.w(TAG, "power menu: " + e.getMessage());
             }
