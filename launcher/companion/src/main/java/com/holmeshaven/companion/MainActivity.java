@@ -393,7 +393,7 @@ public final class MainActivity extends Activity {
     // ---- the remote (M2) -------------------------------------------------------------------------
 
     private void remote() {
-        // power: tap = sleep or wake, hold = our power menu on the TV (Sleep, Restart, Turn off)
+        // power: tap = sleep or wake, hold = our power menu on the TV (Restart, Turn off)
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         remoteLine = new TextView(this);

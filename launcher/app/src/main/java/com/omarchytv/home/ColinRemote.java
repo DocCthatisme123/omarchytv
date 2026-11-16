@@ -99,11 +99,6 @@ final class ColinRemote {
         return send(press(k, 40));
     }
 
-    /** The power menu's Sleep (UI thread): press power off the UI thread. */
-    static void sleepSoon() {
-        new Thread(() -> power(false), "haven-sleep").start();
-    }
-
     /** The power menu's Restart / Turn off: a fixed command (never text from the phone) on our ADB shell. */
     static void shellSoon(String fixedCommand) {
         worker.submit(() -> {
