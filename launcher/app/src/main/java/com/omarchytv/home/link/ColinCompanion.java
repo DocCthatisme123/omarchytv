@@ -60,6 +60,7 @@ public final class ColinCompanion {
     /** One of ours, or null so LinkServer carries on with its own routes. */
     static LinkServer.Response route(String m, String p, JSONObject body) throws JSONException {
         if ("POST".equals(m) && p != null && p.startsWith("/v1/haven/")) return haven(p, body);
+        if ("GET".equals(m) && "/v1/haven/apps".equals(p)) return new LinkServer.Response(200, apps());
         if (!"GET".equals(m) || p == null || !p.startsWith("/v1/companion/")) return null;
         if ("/v1/companion/update".equals(p)) return new LinkServer.Response(200, update());
         if ("/v1/companion/apk".equals(p)) {
@@ -100,6 +101,65 @@ public final class ColinCompanion {
         String e = o.optString("error", "");
         int status = e.isEmpty() ? 200 : e.startsWith("bad_") ? 400 : 503;
         return new LinkServer.Response(status, o);
+    }
+
+    /**
+     * GET /v1/haven/apps: every TV app with its picture for the phone's app grid, A-Z:
+     * {apps: [{package, label, banner (true = wide TV banner, false = square icon), image (base64 WebP)}]}.
+     * Pictures are cached per app version, so after the first call this is quick.
+     */
+    private static final java.util.Map<String, String[]> pics = new java.util.HashMap<>();
+
+    private static JSONObject apps() throws JSONException {
+        Context c = app;
+        org.json.JSONArray out = new org.json.JSONArray();
+        if (c == null) return new JSONObject().put("apps", out);
+        PackageManager pm = c.getPackageManager();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        java.util.List<String[]> rows = new java.util.ArrayList<>();
+        for (String cat : new String[]{android.content.Intent.CATEGORY_LEANBACK_LAUNCHER, android.content.Intent.CATEGORY_LAUNCHER}) {
+            for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(
+                    new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(cat), 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (pkg.equals(c.getPackageName()) || !seen.add(pkg)) continue;
+                rows.add(new String[]{pkg, String.valueOf(ri.activityInfo.applicationInfo.loadLabel(pm))});
+            }
+        }
+        rows.sort((a, b) -> a[1].compareToIgnoreCase(b[1]));
+        for (String[] r : rows) {
+            String[] pic = picture(pm, r[0]);
+            JSONObject o = new JSONObject().put("package", r[0]).put("label", r[1]);
+            if (pic != null) o.put("banner", "1".equals(pic[0])).put("image", pic[1]);
+            out.put(o);
+        }
+        return new JSONObject().put("apps", out);
+    }
+
+    /** {banner "1"/"0", base64 WebP}: the TV banner (320x180) if the app has one, else its icon (144x144). */
+    private static synchronized String[] picture(PackageManager pm, String pkg) {
+        try {
+            PackageInfo pi = pm.getPackageInfo(pkg, 0);
+            String key = pkg + ":" + pi.lastUpdateTime;
+            String[] hit = pics.get(key);
+            if (hit != null) return hit;
+            android.graphics.drawable.Drawable d = pm.getApplicationBanner(pkg);
+            boolean banner = d != null;
+            if (d == null) d = pm.getApplicationIcon(pkg);
+            int w = banner ? 320 : 144, h = banner ? 180 : 144;
+            android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+            d.setBounds(0, 0, w, h);
+            d.draw(cv);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            @SuppressWarnings("deprecation") android.graphics.Bitmap.CompressFormat f = android.graphics.Bitmap.CompressFormat.WEBP;
+            bm.compress(f, 82, out);
+            bm.recycle();
+            String[] v = {banner ? "1" : "0", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)};
+            pics.put(key, v);
+            return v;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static JSONObject update() throws JSONException {

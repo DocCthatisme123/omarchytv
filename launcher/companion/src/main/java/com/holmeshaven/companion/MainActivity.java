@@ -201,8 +201,13 @@ public final class MainActivity extends Activity {
 
     private void showHome() {
         onHome = true;
+        inApps = false;
         clear();
         header(tv.name);
+        Button apps = button("▦  Apps", GOLD, COSMIC);
+        apps.setTextColor(NIGHT_SKY);
+        apps.setOnClickListener(v -> showApps());
+        space(6);
         remote();
         space(18);
         TextView about = text("About the TV", 18, GOLD, true);
@@ -228,8 +233,6 @@ public final class MainActivity extends Activity {
         Button refresh = button("Refresh", AURORA, NEBULA);
         refresh.setOnClickListener(v -> refresh(true));
         space(24);
-        TextView next = small("The app list comes next.");
-        next.setGravity(Gravity.CENTER);
         Button forget = flat("Forget this TV");
         forget.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("Forget " + tv.name + "?")
@@ -645,6 +648,130 @@ public final class MainActivity extends Activity {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // ---- apps (M3) ----------------------------------------------------------------------------
+
+    private org.json.JSONArray appsCache;
+    private boolean inApps;
+
+    private void showApps() {
+        finder.stop();
+        onHome = false;
+        inApps = true;
+        clear();
+        header("Apps");
+        Button back = button("←  Back to the remote", NEBULA, AURORA);
+        back.setOnClickListener(v -> showHome());
+        TextView msg = small(appsCache == null ? "Asking the TV for its apps…" : "");
+        LinearLayout grid = column();
+        page.addView(grid);
+        if (appsCache != null) fillApps(grid, appsCache);
+        final Vault.Tv t = tv;
+        work(() -> {
+            JSONObject o = new Link(t.host, t.pcId, t.token).getJson("/v1/haven/apps", 25_000);
+            org.json.JSONArray a = o.optJSONArray("apps");
+            main.post(() -> {
+                if (!inApps || a == null) return;
+                boolean changed = appsCache == null || !appsCache.toString().equals(a.toString());
+                appsCache = a;
+                msg.setText(a.length() == 0 ? "The TV didn't list any apps." : "");
+                if (changed) fillApps(grid, a);
+            });
+        }, e -> {
+            if (inApps) toastLine(msg, "Can't reach the TV right now.");
+        });
+    }
+
+    /** Two big cards per row: the app's TV banner (or its icon on a dark card) with its name under it. */
+    private void fillApps(LinearLayout grid, org.json.JSONArray a) {
+        grid.removeAllViews();
+        LinearLayout row = null;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject app = a.optJSONObject(i);
+            if (app == null) continue;
+            if (row == null || row.getChildCount() == 2) {
+                row = new LinearLayout(this);
+                grid.addView(row);
+            }
+            row.addView(appCard(app), appCardParams());
+        }
+        if (row != null && row.getChildCount() == 1) row.addView(new View(this), appCardParams());
+    }
+
+    private LinearLayout.LayoutParams appCardParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        p.setMargins(dp(5), dp(6), dp(5), dp(6));
+        return p;
+    }
+
+    private View appCard(JSONObject app) {
+        String pkg = app.optString("package"), label = app.optString("label", pkg);
+        LinearLayout card = column();
+        card.setPadding(dp(6), dp(6), dp(6), dp(8));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(CARD);
+        g.setCornerRadius(dp(16));
+        card.setBackground(g);
+        ImageView img = new ImageView(this);
+        img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        String b64 = app.optString("image", "");
+        if (!b64.isEmpty()) {
+            try {
+                byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                img.setImageBitmap(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length));
+            } catch (Exception ignored) {
+            }
+        }
+        boolean banner = app.optBoolean("banner", false);
+        GradientDrawable ib = new GradientDrawable();
+        ib.setColor(0xFF0E1630);
+        ib.setCornerRadius(dp(12));
+        img.setBackground(ib);
+        img.setClipToOutline(true);
+        if (!banner) img.setPadding(dp(18), dp(10), dp(18), dp(10));
+        card.addView(img, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(92)));
+        TextView name = new TextView(this);
+        name.setText(label);
+        name.setTextColor(CREAM);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        name.setGravity(Gravity.CENTER);
+        name.setMaxLines(2);
+        name.setPadding(0, dp(6), 0, 0);
+        card.addView(name);
+        card.setOnTouchListener((v, e) -> {
+            if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+            return false;
+        });
+        card.setOnClickListener(v -> openApp(pkg, label));
+        return card;
+    }
+
+    private void openApp(String pkg, String label) {
+        final Vault.Tv t = tv;
+        if (t == null) return;
+        keys.execute(() -> {
+            try {
+                new Link(t.host, t.pcId, t.token).postJson("/v1/apps/launch", new JSONObject().put("package", pkg));
+                main.post(() -> {
+                    android.widget.Toast.makeText(this, "Opening " + label + " on the TV", android.widget.Toast.LENGTH_SHORT).show();
+                    showHome();   // back to the remote, ready to drive the app
+                });
+            } catch (Exception e) {
+                main.post(() -> android.widget.Toast.makeText(this, "Couldn't open " + label + ": " + e.getMessage(),
+                        android.widget.Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (inApps) {
+            showHome();
+            return;
+        }
+        super.onBackPressed();
     }
 
     // ---- small helpers -------------------------------------------------------------------------

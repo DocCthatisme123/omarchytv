@@ -112,7 +112,11 @@ final class Link {
     // ---- signed --------------------------------------------------------------------------------
 
     JSONObject getJson(String path) throws IOException {
-        return call("GET", path, null, 6000).json();
+        return getJson(path, 6000);
+    }
+
+    JSONObject getJson(String path, int timeoutMs) throws IOException {
+        return call("GET", path, null, timeoutMs).json();
     }
 
     JSONObject postJson(String path, JSONObject body) throws IOException {

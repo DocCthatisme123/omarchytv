@@ -86,3 +86,8 @@ channel_up/down, 0-9, power; hold=true on power = the shutdown prompt; "wakeup"/
 `POST /v1/haven/workspace {n}` (switches in place in the launcher, like Left/Right; from another app it opens the launcher straight on that workspace), `POST /v1/haven/warm` (the app opened: connect now).
 `/v1/status` carries `remote` (off/starting/needs_allow/adb_off/ready) and `wakeMac` (from `dumpsys ethernet`, since
 apps can't read the MAC on Android 10); the phone keeps it and sends Wake-on-LAN when the TV doesn't answer.
+
+## Holmes Haven phone app, M3: apps
+`GET /v1/haven/apps` (signed) lists every TV app A-Z with its picture: the TV banner (320x180) when the app has one,
+else its icon (144x144), as base64 WebP, cached per app version on the TV. The phone's Apps screen shows them two per
+row; a tap opens the app (Marco's `POST /v1/apps/launch`) and goes back to the remote.
