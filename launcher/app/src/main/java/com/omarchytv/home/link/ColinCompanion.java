@@ -2,6 +2,8 @@ package com.omarchytv.home.link;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.os.StatFs;
 import android.os.SystemClock;
 
@@ -11,7 +13,6 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 
 /**
@@ -25,7 +26,7 @@ import java.security.MessageDigest;
  */
 public final class ColinCompanion {
     public static final String PACKAGE = "com.holmeshaven.companion";
-    private static final long MAX_APK = 40L * 1024 * 1024;
+    private static final long MAX_APK = 8L * 1024 * 1024;   // held in memory on a 32-bit TV; ours is ~0.2 MB
 
     private static volatile Context app;
     private static String shaKey, sha;
@@ -53,7 +54,7 @@ public final class ColinCompanion {
             if (f == null) return new LinkServer.Response(404, new JSONObject().put("error", "no_update"));
             try {
                 LinkServer.Response r = new LinkServer.Response(200, null);
-                r.body = Files.readAllBytes(f.toPath());
+                r.body = readAll(f);
                 r.headers.put("X-Haven-Sha256", sha256(f));
                 return r;
             } catch (Exception e) {
@@ -70,6 +71,8 @@ public final class ColinCompanion {
         if (f == null || c == null) return o;
         PackageInfo pi = c.getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
         if (pi == null || !PACKAGE.equals(pi.packageName)) return o;
+        // Other TV apps can write into our external folder: only offer an APK signed with the same key as this launcher.
+        if (!sameSigner(c, f)) return o;
         String s = sha256(f);
         if (s == null) return o;
         @SuppressWarnings("deprecation") long vc = android.os.Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode;
@@ -87,6 +90,31 @@ public final class ColinCompanion {
             o.put("androidVersion", android.os.Build.VERSION.RELEASE);
         } catch (Exception ignored) {
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    private static boolean sameSigner(Context c, File f) {
+        try {
+            PackageManager pm = c.getPackageManager();
+            Signature[] mine = pm.getPackageInfo(c.getPackageName(), PackageManager.GET_SIGNATURES).signatures;
+            PackageInfo a = pm.getPackageArchiveInfo(f.getAbsolutePath(), PackageManager.GET_SIGNATURES);
+            Signature[] theirs = a == null ? null : a.signatures;
+            if (mine == null || theirs == null || mine.length == 0 || mine.length != theirs.length) return false;
+            for (int i = 0; i < mine.length; i++) if (!mine[i].equals(theirs[i])) return false;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static byte[] readAll(File f) throws java.io.IOException {
+        byte[] b = new byte[(int) f.length()];
+        try (InputStream in = new FileInputStream(f)) {
+            int off = 0;
+            for (int n; off < b.length && (n = in.read(b, off, b.length - off)) > 0; ) off += n;
+            if (off != b.length) throw new java.io.IOException("short read");
+        }
+        return b;
     }
 
     private static synchronized String sha256(File f) {
