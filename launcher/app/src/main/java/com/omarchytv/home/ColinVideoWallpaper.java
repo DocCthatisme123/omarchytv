@@ -66,16 +66,27 @@ final class ColinVideoWallpaper {
      * (or never, if it fails). True if a clip is playing/starting.
      */
     boolean startFile(Context c, ViewGroup root, File f, Runnable onFrame) {
+        return start(c, root, f, onFrame, -1, null);
+    }
+
+    /** startFile, in hold mode when {@code hold >= 0}. The hold is set after stop(), which clears it. */
+    private boolean start(Context c, ViewGroup root, File f, Runnable onFrame, int hold, Runnable frame) {
         if (!usable(f)) f = null;
         if (f == null || root == null) {
             stop(root);
             return false;
         }
         if (view != null && f.getAbsolutePath().equals(path)) {
+            if (hold >= 0) {   // surface still there, player coming back with it: hold the current page then
+                holdMs = hold;
+                holdFrame = frame;
+            }
             if (onFrame != null && player != null) view.post(onFrame);   // already playing
             return true;
         }
         stop(root);
+        holdMs = hold;   // after stop(): it resets the hold, which left a wake-up looping all five pictures behind black
+        holdFrame = frame;
         if (!f.getAbsolutePath().equals(path)) resumeAt = 0;
         path = f.getAbsolutePath();
         final String p = path, k = key(f);
@@ -140,9 +151,8 @@ final class ColinVideoWallpaper {
             if (prepared) seekHold(player);
             return true;
         }
-        holdMs = ms;
         prepared = false;
-        return startFile(c, root, f, null);
+        return start(c, root, f, null, ms, onFrame);
     }
 
     /** Seek to holdMs, play a moment so the frame is decoded and shown, then pause on it. */
